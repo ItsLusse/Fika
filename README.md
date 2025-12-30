@@ -13,3 +13,6 @@ Players need to signup with their exact in-game character name.
 
 <img width="466" height="505" alt="image" src="https://github.com/user-attachments/assets/471e1c43-a644-4a71-93f3-1c999acff28a" />
 
+It's still possible to copy pure signups, however there will be no group sorting.
+
+<img width="502" height="688" alt="image" src="https://github.com/user-attachments/assets/9c1d1545-8c24-4aeb-9e60-03cdbbbdac9b" />
