@@ -178,59 +178,72 @@ Group 8:
 
     function parseAndFormat(text) {
     const lines = text.split(/\r?\n/);
-    const players = [];
+    const groups = {};
+    const ungrouped = [];
+    let currentGroup = null;
 
     for (let raw of lines) {
         let line = raw.replace(/\u00A0/g, ' ').trim();
         if (!line) continue;
 
-        // Skip separators
-        if (/^[-—–]+$/.test(line)) continue;
-
-        // Remove Group headers
-        if (/^Group\s*\d+\s*:/i.test(line)) continue;
-
-        // 🔥 REMOVE headers like ":Tentative: Tentative (4) :" anywhere in line
-        line = line.replace(/:[^:]+:\s*[^:]+\(\d+\)\s*:/g, '').trim();
-        if (!line) continue;
-
-        // Split comma-separated entries (Tentative etc)
-        if (line.includes(',')) {
-            line.split(',').forEach(part => {
-                lines.push(part.trim());
-            });
+        // Detect "Group X:" headers
+        const groupMatch = line.match(/^Group\s*(\d+)\s*:/i);
+        if (groupMatch) {
+            currentGroup = parseInt(groupMatch[1], 10);
+            if (!groups[currentGroup]) groups[currentGroup] = [];
             continue;
         }
 
-        // Match ":Spec: Name" OR ":Spec: 12 Name"
+        // Skip separators or Tentative headers
+        if (/^[-—–]+$/.test(line)) continue;
+        line = line.replace(/:[^:]+:\s*[^:]+\(\d+\)\s*:/g, '').trim();
+        if (!line) continue;
+
+        // Split comma-separated entries
+        if (line.includes(',')) {
+            line.split(',').forEach(p => lines.push(p.trim()));
+            continue;
+        }
+
+        // Match ":Spec: 12 Name" or ":Spec: Name"
         const match = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
         if (!match) continue;
 
         const name = match[3].trim();
-
-        // Extra safety: ignore leftovers like "(4)"
         if (/\(.+\)$/.test(name)) continue;
 
-        players.push(name);
-    }
-
-    // Distribute into groups of 5, Group 1–8
-    const entries = [];
-    let group = 1;
-    let count = 0;
-
-    for (const name of players) {
-        entries.push(`${group} ${name}`);
-        count++;
-
-        if (count === 5) {
-            group++;
-            count = 0;
-            if (group > 8) break;
+        // Assign to current group if exists, else mark ungrouped
+        if (currentGroup !== null) {
+            if (!groups[currentGroup]) groups[currentGroup] = [];
+            groups[currentGroup].push(name);
+        } else {
+            ungrouped.push(name);
         }
     }
 
-    return entries.join(',');
+    // Ensure all 8 groups exist
+    for (let i = 1; i <= 8; i++) {
+        if (!groups[i]) groups[i] = [];
+    }
+
+    // Fill ungrouped players into groups with less than 5
+    let groupIndex = 1;
+    for (const name of ungrouped) {
+        while (groups[groupIndex].length >= 5) {
+            groupIndex++;
+            if (groupIndex > 8) break;
+        }
+        if (groupIndex > 8) break;
+        groups[groupIndex].push(name);
+    }
+
+    // Flatten to output
+    const output = [];
+    for (let i = 1; i <= 8; i++) {
+        groups[i].forEach(name => output.push(`${i} ${name}`));
+    }
+
+    return output.join(',');
 }
 
   transformBtn.addEventListener('click', () => {
