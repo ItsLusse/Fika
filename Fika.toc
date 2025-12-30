@@ -1,0 +1,10 @@
+## Interface: 11200
+## Title: |cff00ccffF.|cffffff00I.K.|cff00ccffA|r
+## Author: Cliffholger
+## Notes: Fast Invite Komp Assigner invites players from the Raid-Helper roster and organizes raid groups to match the Raid-Helper Discord setup.
+## Version: 1.2.5
+## DefaultState: Enabled
+## SavedVariables: FIKA_Roster, FIKA_Assist, FIKA_Preraid, FIKA_Settings, FIKA_Keyword
+## LoadOnDemand: 0
+
+Fika.lua

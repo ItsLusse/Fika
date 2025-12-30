@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RAI Formatter</title>
+<style>
+  :root{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+  body{margin:0;background:#0f172a;color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+  .card{background:linear-gradient(180deg,#07102a 0%, #081428 100%);border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 30px rgba(2,6,23,0.6);width:100%;max-width:980px;border-radius:12px;padding:18px;}
+  h1{margin:0 0 10px 0;font-size:20px;}
+  p{margin:0 0 14px 0;color:#a9bedc;font-size:13px;}
+  .row{display:flex;gap:12px;}
+  textarea{width:100%;min-height:280px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#021026;color:inherit;font-family:monospace;font-size:13px;resize:vertical;}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  button{background:#0b6bff;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe3ff;}
+  button.copy{background:#14b8a6;}
+  .output{margin-top:12px;}
+  .small{font-size:12px;color:#7f9fc0;}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;}
+  .example-toggle{background:transparent;border:none;color:#7f9fc0;cursor:pointer;padding:6px;}
+  .footer{margin-top:12px;font-size:12px;color:#7f9fc0;}
+  @media (max-width:760px){ .row{flex-direction:column;} }
+</style>
+</head>
+<body>
+  <div class="card" role="main">
+    <div class="flex-between">
+      <div>
+        <h1>RAI Formatter — Group → "N Name" CSV</h1>
+        <p class="small">Paste group text on the left, click <strong>Transform</strong>. The output will be a comma-separated list like <code>1 Azzco,1 Moggemannen,...</code>. Blank lines and separators are ignored.</p>
+      </div>
+      <div>
+        <button id="loadExample" class="ghost example-toggle">Load Example</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <div style="flex:1 1 50%;">
+        <label class="small">Input (your Group text):</label>
+        <textarea id="input" spellcheck="false"></textarea>
+      </div>
+      <div style="flex:1 1 50%;">
+        <label class="small">Output (comma-separated):</label>
+        <textarea id="output" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="transform">Transform</button>
+      <button id="copy" class="copy">Copy result</button>
+      <button id="clear" class="ghost">Clear</button>
+      <button id="download" class="ghost">Download .txt</button>
+      <div style="flex:1"></div>
+      <div class="small" id="status">Ready.</div>
+    </div>
+
+    <div class="output">
+      <p class="small"><strong>Notes:</strong> 
+        The parser recognizes lines starting with <code>Group N:</code> (or <code>GroupN:</code>), and lines containing <code>:emote:</code>. If a line contains no <code>:emote:</code>, the line text is used as the name (trimmed). Lines with only hyphens or empty lines are ignored.</p>
+    </div>
+
+    <div class="footer">Made for your RAI formatting rule — paste groups and press Transform.</div>
+  </div>
+
+<script>
+(function(){
+  const input = document.getElementById('input');
+  const output = document.getElementById('output');
+  const transformBtn = document.getElementById('transform');
+  const copyBtn = document.getElementById('copy');
+  const clearBtn = document.getElementById('clear');
+  const status = document.getElementById('status');
+  const loadExample = document.getElementById('loadExample');
+  const downloadBtn = document.getElementById('download');
+
+  const exampleText = `Group 1:
+:Protection:
+ Belladini
+:Protection:
+ Tulik
+:Guardian:
+ Cliffholger
+:Restoration1:
+ Bubkez
+:Protection1:
+ trdn
+‎
+Group 2:
+:Feral:
+ Hagstorm
+:Fury:
+ Azzco
+:Assassination:
+ Kroken
+:Fury:
+ Kaviar
+:Elemental:
+ Ambulans
+‎
+Group 3:
+:Fury:
+ Lorlin
+:Feral:
+ Formbytare
+:Fury:
+ Ugge
+:Elemental:
+ Cephalofair
+:Assassination:
+ Quickfall
+‎
+Group 4:
+:Fury:
+ Aktarare
+:Assassination:
+ Artchi
+:Arms:
+ Peggolina
+:Marksmanship:
+ Vasslan
+:Retribution:
+ Skogshelig
+‎
+Group 5:
+:Subtlety:
+ Chizhera
+:Retribution:
+ Bertholdt
+:Marksmanship:
+ Jouthor
+:Combat:
+ Fredzy
+:Marksmanship:
+ Baldhunter
+‎
+Group 6:
+:Smite:
+ Creato
+:Balance:
+ Stompzilla
+:Arcane:
+ Dundergullig
+:Arcane:
+ Gnomegedon
+:Arcane:
+ Arcaneyy
+‎
+Group 7:
+:Holy1:
+ Krelle
+:Shadow:
+ Heartstiller
+:Destruction:
+ helldemon
+:Restoration:
+ Taengil
+:Demonology:
+ Burklock
+‎
+Group 8:
+:Restoration:
+ Koerpoega
+:Restoration:
+ Pamedi
+:Restoration:
+ Pooras
+:Holy:
+ Kexz
+:Marksmanship:
+ Koretezzu`;
+
+  loadExample.addEventListener('click', () => {
+    input.value = exampleText;
+    status.textContent = 'Example loaded.';
+  });
+
+    function parseAndFormat(text) {
+    const lines = text.split(/\r?\n/);
+    const players = [];
+
+    for (let raw of lines) {
+        let line = raw.replace(/\u00A0/g, ' ').trim();
+        if (!line) continue;
+
+        // Skip separators
+        if (/^[-—–]+$/.test(line)) continue;
+
+        // Remove Group headers
+        if (/^Group\s*\d+\s*:/i.test(line)) continue;
+
+        // 🔥 REMOVE headers like ":Tentative: Tentative (4) :" anywhere in line
+        line = line.replace(/:[^:]+:\s*[^:]+\(\d+\)\s*:/g, '').trim();
+        if (!line) continue;
+
+        // Split comma-separated entries (Tentative etc)
+        if (line.includes(',')) {
+            line.split(',').forEach(part => {
+                lines.push(part.trim());
+            });
+            continue;
+        }
+
+        // Match ":Spec: Name" OR ":Spec: 12 Name"
+        const match = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
+        if (!match) continue;
+
+        const name = match[3].trim();
+
+        // Extra safety: ignore leftovers like "(4)"
+        if (/\(.+\)$/.test(name)) continue;
+
+        players.push(name);
+    }
+
+    // Distribute into groups of 5, Group 1–8
+    const entries = [];
+    let group = 1;
+    let count = 0;
+
+    for (const name of players) {
+        entries.push(`${group} ${name}`);
+        count++;
+
+        if (count === 5) {
+            group++;
+            count = 0;
+            if (group > 8) break;
+        }
+    }
+
+    return entries.join(',');
+}
+
+  transformBtn.addEventListener('click', () => {
+    try {
+      const result = parseAndFormat(input.value);
+      output.value = result;
+      status.textContent = `Transformed — ${ result ? result.split(',').length : 0 } entries.`;
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Error during transform — see console.';
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(output.value);
+      status.textContent = 'Copied to clipboard.';
+    } catch (e) {
+      output.select();
+      document.execCommand('copy');
+      status.textContent = 'Copied (fallback).';
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    output.value = '';
+    status.textContent = 'Cleared.';
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const blob = new Blob([output.value], {type: 'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rai-formatted.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = 'Downloaded rai-formatted.txt';
+  });
+
+  input.value = exampleText;
+})();
+</script>
+</body>
+</html>
