@@ -11,4 +11,5 @@ Import the string from the .html into the addon.
 
 Players need to signup with their exact in-game character name.
 
-<img width="680" height="565" alt="image" src="https://github.com/user-attachments/assets/2ff7e125-3e45-40ec-a906-cb72b7ad30b4" />
+<img width="466" height="505" alt="image" src="https://github.com/user-attachments/assets/471e1c43-a644-4a71-93f3-1c999acff28a" />
+
