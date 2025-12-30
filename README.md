@@ -11,7 +11,7 @@ Import the string from the .html into the addon.
 
 Players need to signup with their exact in-game character name.
 
-<img width="466" height="505" alt="image" src="https://github.com/user-attachments/assets/471e1c43-a644-4a71-93f3-1c999acff28a" />
+<img width="474" height="547" alt="image" src="https://github.com/user-attachments/assets/fe6ea515-5497-4a15-b90a-b27696f54910" />
 
 It's still possible to copy pure signups, however there will be no group sorting.
 
