@@ -182,65 +182,111 @@ Group 8:
     const ungrouped = [];
     let currentGroup = null;
 
-    for (let raw of lines) {
-        let line = raw.replace(/\u00A0/g, ' ').trim();
-        if (!line) continue;
-
-        // Detect "Group X:" headers
-        const groupMatch = line.match(/^Group\s*(\d+)\s*:/i);
-        if (groupMatch) {
-            currentGroup = parseInt(groupMatch[1], 10);
-            if (!groups[currentGroup]) groups[currentGroup] = [];
-            continue;
-        }
-
-        // Skip separators or Tentative headers
-        if (/^[-—–]+$/.test(line)) continue;
-        line = line.replace(/:[^:]+:\s*[^:]+\(\d+\)\s*:/g, '').trim();
-        if (!line) continue;
-
-        // Split comma-separated entries
-        if (line.includes(',')) {
-            line.split(',').forEach(p => lines.push(p.trim()));
-            continue;
-        }
-
-        // Match ":Spec: 12 Name" or ":Spec: Name"
-        const match = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
-        if (!match) continue;
-
-        const name = match[3].trim();
-        if (/\(.+\)$/.test(name)) continue;
-
-        // Assign to current group if exists, else mark ungrouped
+    function addPlayer(name) {
+        if (!name) return;
         if (currentGroup !== null) {
-            if (!groups[currentGroup]) groups[currentGroup] = [];
             groups[currentGroup].push(name);
         } else {
             ungrouped.push(name);
         }
     }
 
-    // Ensure all 8 groups exist
-    for (let i = 1; i <= 8; i++) {
-        if (!groups[i]) groups[i] = [];
-    }
+    for (let raw of lines) {
+        let line = raw
+            .replace(/[\u00A0\u2000-\u200F\u2800\uFE0E\uFE0F]/g, ' ')
+            .trim();
 
-    // Fill ungrouped players into groups with less than 5
-    let groupIndex = 1;
-    for (const name of ungrouped) {
-        while (groups[groupIndex].length >= 5) {
-            groupIndex++;
-            if (groupIndex > 8) break;
+        if (!line) continue;
+
+        // ===============================
+        // GROUP HEADERS
+        // ===============================
+        const groupMatch = line.match(/^Group\s*(\d+)\s*:/i);
+        if (groupMatch) {
+            currentGroup = parseInt(groupMatch[1], 10);
+            groups[currentGroup] ||= [];
+            continue;
         }
-        if (groupIndex > 8) break;
-        groups[groupIndex].push(name);
+
+        // ===============================
+        // SKIP CLASS HEADERS (":Warrior: Warrior (2)")
+        // ===============================
+        if (/^:[^:]+:\s+[^()]+\(\d+\)$/.test(line)) {
+            currentGroup = null;
+            continue;
+        }
+
+        // ===============================
+        // SKIP EMPTY SLOTS
+        // ===============================
+        if (/^[-—–]+$/.test(line)) continue;
+
+        // ===============================
+        // ATTENDANCE FORMAT
+        // ===============================
+        const attendanceMatch = line.match(
+            /^(?::(Confirmed|Cancelled):\s*)?(?::[^:]+:\s*)*(.+)$/
+        );
+
+        if (attendanceMatch && /Confirmed|Cancelled/.test(line)) {
+            const status = attendanceMatch[1];
+            const name = attendanceMatch[2]?.trim();
+
+            if (!name || status === 'Cancelled') continue;
+            addPlayer(name);
+            continue;
+        }
+
+        // ===============================
+        // LATE / TENTATIVE (comma-separated specs)
+        // ===============================
+        if (/^:(Late|Tentative):/i.test(line)) {
+            const parts = line.split(',');
+            for (const part of parts) {
+                const m = part.match(/:\s*\d+\s+(.+)$/);
+                if (m) addPlayer(m[1].trim());
+            }
+            continue;
+        }
+
+        // ===============================
+        // STANDARD SPEC LINE
+        // :Fury: 22 bishAo
+        // :Holy1: Thildra
+        // ===============================
+        const specMatch = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
+        if (specMatch) {
+            const name = specMatch[3].trim();
+            if (!/\(.+\)$/.test(name)) {
+                addPlayer(name);
+            }
+            continue;
+        }
     }
 
-    // Flatten to output
+    // ===============================
+    // ENSURE 8 GROUPS
+    // ===============================
+    for (let i = 1; i <= 8; i++) groups[i] ||= [];
+
+    // ===============================
+    // FILL UNGROUPED
+    // ===============================
+    let gi = 1;
+    for (const name of ungrouped) {
+        while (gi <= 8 && groups[gi].length >= 5) gi++;
+        if (gi > 8) break;
+        groups[gi].push(name);
+    }
+
+    // ===============================
+    // OUTPUT
+    // ===============================
     const output = [];
     for (let i = 1; i <= 8; i++) {
-        groups[i].forEach(name => output.push(`${i} ${name}`));
+        for (const name of groups[i]) {
+            output.push(`${i} ${name}`);
+        }
     }
 
     return output.join(',');
