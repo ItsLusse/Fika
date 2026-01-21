@@ -389,6 +389,16 @@ local function UpdateRoster()
 					fontString:SetText(TruncateColoredText(txt, 19))
                 end
             end
+
+			-- Button
+			local btn = Fika.Roster.GroupButtons[group] and Fika.Roster.GroupButtons[group][i]
+			if btn then
+				if plannedRoster[i] then
+					btn:Show()
+				else
+					btn:Hide()
+				end
+			end
         end
     end
 end
@@ -2018,11 +2028,35 @@ function Fika.Roster:Gui()
 		self.groupTitle:SetText("Group "..group)
 
 		self.GroupMembers[group] = {}
+
+		self.GroupButtons = self.GroupButtons or {}
+		self.GroupButtons[group] = self.GroupButtons[group] or {}
+
 		for i = 1, 5 do
-			self.members = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-			self.members:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - (i * playerSpacingY))
-			self.members:SetText("|cffff0000---|r")
-			self.GroupMembers[group][i] = self.members
+			local member = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			member:SetPoint("TOPLEFT", self, "TOPLEFT", groupX + 12, groupY - (i * playerSpacingY))
+			member:SetText("|cffff0000---|r")
+			self.GroupMembers[group][i] = member
+
+			-- - Button
+			local btn = CreateFrame("Button", nil, self.Background.Tab1, "UIPanelButtonTemplate")
+			btn:SetWidth(12)
+			btn:SetHeight(12)
+			btn:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - (i * playerSpacingY))
+			btn:SetText("|cffff0000-|r")
+
+			self.GroupButtons[group][i] = btn
+
+			-- capture values
+			local g = group
+			local idx = i
+
+			btn:SetScript("OnClick", function()
+				local name = FIKA_Roster[g] and FIKA_Roster[g][idx]
+				if name then
+					RemoveFromRoster(name)
+				end
+			end)
 		end
 	end
 
