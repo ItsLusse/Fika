@@ -640,7 +640,6 @@ local function Plus(arg1, arg2, from)
     if FIKA_Settings["inv"] == true then
         local msg = arg1
         local sender = arg2
-
         if msg == FIKA_Settings["keyword"] then
             local raidMembers = {}
 			local raidCount = 0
@@ -2127,6 +2126,12 @@ function Fika.Roster:Gui()
 
 	self.KeywordEditBox:SetScript("OnChar", function()
 		self.KeywordplaceholderText:Hide()
+		
+		local n = self.KeywordEditBox:GetText()
+		if n then 
+			local txt = string.lower(string.sub(n,1,1))..string.lower(string.sub(n,2))
+			self.KeywordEditBox:SetText(txt)
+		end
 	end)
 
 	--keywordText
