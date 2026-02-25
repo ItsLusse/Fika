@@ -3,300 +3,341 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>RAI Formatter</title>
+<title>Fika Formatter</title>
+
 <style>
-  :root{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
-  body{margin:0;background:#0f172a;color:#e6eef8;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
-  .card{background:linear-gradient(180deg,#07102a 0%, #081428 100%);border:1px solid rgba(255,255,255,0.03);box-shadow:0 6px 30px rgba(2,6,23,0.6);width:100%;max-width:980px;border-radius:12px;padding:18px;}
-  h1{margin:0 0 10px 0;font-size:20px;}
-  p{margin:0 0 14px 0;color:#a9bedc;font-size:13px;}
-  .row{display:flex;gap:12px;}
-  textarea{width:100%;min-height:280px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:#021026;color:inherit;font-family:monospace;font-size:13px;resize:vertical;}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
-  button{background:#0b6bff;color:white;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
-  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe3ff;}
-  button.copy{background:#14b8a6;}
-  .output{margin-top:12px;}
-  .small{font-size:12px;color:#7f9fc0;}
-  .flex-between{display:flex;justify-content:space-between;align-items:center;}
-  .example-toggle{background:transparent;border:none;color:#7f9fc0;cursor:pointer;padding:6px;}
-  .footer{margin-top:12px;font-size:12px;color:#7f9fc0;}
-  @media (max-width:760px){ .row{flex-direction:column;} }
+:root{
+  --bg1:#0f172a;
+  --bg2:#1e293b;
+  --card:#0b1220;
+  --accent:#3b82f6;
+  --accent2:#14b8a6;
+  --text:#e6eef8;
+  --muted:#94a3b8;
+}
+
+*{box-sizing:border-box;}
+
+body{
+  margin:0;
+  font-family:'Inter',system-ui;
+  background:radial-gradient(circle at 20% 20%, #1e293b, #0f172a 60%);
+  color:var(--text);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:24px;
+}
+
+.card{
+  width:100%;
+  max-width:1100px;
+  background:rgba(15,23,42,0.75);
+  backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,0.05);
+  border-radius:18px;
+  padding:32px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.6);
+}
+
+/* Header */
+.header{
+  margin-bottom:24px;
+}
+
+.app-title{
+  font-size:28px;
+  font-weight:700;
+  letter-spacing:-0.5px;
+  margin:0;
+}
+
+.app-sub{
+  margin:4px 0 0 0;
+  font-size:14px;
+  color:var(--muted);
+}
+
+/* Layout */
+.row{
+  display:flex;
+  gap:20px;
+}
+
+.panel{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+label{
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+
+textarea{
+  flex:1;
+  min-height:300px;
+  padding:16px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.06);
+  background:#0a1627;
+  color:var(--text);
+  font-family:monospace;
+  font-size:13px;
+  resize:vertical;
+  transition:all 0.2s ease;
+}
+
+textarea:focus{
+  outline:none;
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(59,130,246,0.3);
+}
+
+/* Buttons */
+.controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  margin-top:20px;
+  align-items:center;
+}
+
+button{
+  padding:10px 16px;
+  border-radius:10px;
+  border:none;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.15s ease;
+}
+
+button.primary{
+  background:linear-gradient(135deg,var(--accent),#2563eb);
+  color:white;
+}
+
+button.primary:hover{
+  transform:translateY(-1px);
+  box-shadow:0 6px 16px rgba(59,130,246,0.4);
+}
+
+button.secondary{
+  background:rgba(255,255,255,0.05);
+  color:var(--text);
+  border:1px solid rgba(255,255,255,0.08);
+}
+
+button.secondary:hover{
+  background:rgba(255,255,255,0.08);
+}
+
+button.success{
+  background:linear-gradient(135deg,var(--accent2),#0f766e);
+  color:white;
+}
+
+.status{
+  margin-left:auto;
+  font-size:13px;
+  color:var(--muted);
+}
+
+.footer{
+  margin-top:24px;
+  font-size:12px;
+  color:var(--muted);
+  opacity:0.7;
+}
+
+@media (max-width:900px){
+  .row{flex-direction:column;}
+}
 </style>
 </head>
+
 <body>
   <div class="card" role="main">
-    <div class="flex-between">
-      <div>
-        <h1>RAI Formatter — Group → "N Name" CSV</h1>
-        <p class="small">Paste group text on the left, click <strong>Transform</strong>. The output will be a comma-separated list like <code>1 Azzco,1 Moggemannen,...</code>. Blank lines and separators are ignored.</p>
-      </div>
-      <div>
-        <button id="loadExample" class="ghost example-toggle">Load Example</button>
-      </div>
-    </div>
 
-    <div class="row" style="margin-top:12px;">
-      <div style="flex:1 1 50%;">
-        <label class="small">Input (your Group text):</label>
-        <textarea id="input" spellcheck="false"></textarea>
-      </div>
-      <div style="flex:1 1 50%;">
-        <label class="small">Output (comma-separated):</label>
-        <textarea id="output" readonly></textarea>
-      </div>
-    </div>
-
-    <div class="controls">
-      <button id="transform">Transform</button>
-      <button id="copy" class="copy">Copy result</button>
-      <button id="clear" class="ghost">Clear</button>
-      <button id="download" class="ghost">Download .txt</button>
-      <div style="flex:1"></div>
-      <div class="small" id="status">Ready.</div>
-    </div>
-
-    <div class="output">
-      <p class="small"><strong>Notes:</strong> 
-        The parser recognizes lines starting with <code>Group N:</code> (or <code>GroupN:</code>), and lines containing <code>:emote:</code>. If a line contains no <code>:emote:</code>, the line text is used as the name (trimmed). Lines with only hyphens or empty lines are ignored.</p>
-    </div>
-
-    <div class="footer">Made for your RAI formatting rule — paste groups and press Transform.</div>
+  <div class="header">
+    <h1 class="app-title">Fast Invite Komp Assigner</h1>
+    <p class="app-sub">Transform Composition (JSON or Signup Text) into Import String</p>
   </div>
 
+  <div class="row">
+    <div class="panel">
+      <label>Input (JSON or Signup Text)</label>
+      <textarea id="input" spellcheck="false"></textarea>
+    </div>
+
+    <div class="panel">
+      <label>Formatted Output</label>
+      <textarea id="output" readonly></textarea>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="transform" class="primary">Transform</button>
+    <button id="copy" class="success">Copy</button>
+    <button id="clear" class="secondary">Clear</button>
+    <button id="loadExample" class="secondary">Load Example</button>
+    <div class="status" id="status">Ready.</div>
+  </div>
+
+  <div class="footer">
+    Paste your Composition (JSON or Signup Text) and click Transform. Cancelled slots are automatically excluded.
+  </div>
+
+</div>
+
 <script>
-(function(){
-  const input = document.getElementById('input');
-  const output = document.getElementById('output');
-  const transformBtn = document.getElementById('transform');
-  const copyBtn = document.getElementById('copy');
-  const clearBtn = document.getElementById('clear');
-  const status = document.getElementById('status');
-  const loadExample = document.getElementById('loadExample');
-  const downloadBtn = document.getElementById('download');
+  (function(){
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const transformBtn = document.getElementById('transform');
+    const copyBtn = document.getElementById('copy');
+    const clearBtn = document.getElementById('clear');
+    const status = document.getElementById('status');
+    const loadExample = document.getElementById('loadExample');
 
-  const exampleText = `Group 1:
-:Protection:
- Belladini
-:Protection:
- Tulik
-:Guardian:
- Cliffholger
-:Restoration1:
- Bubkez
-:Protection1:
- trdn
-‎
-Group 2:
-:Feral:
- Hagstorm
-:Fury:
- Azzco
-:Assassination:
- Kroken
-:Fury:
- Kaviar
-:Elemental:
- Ambulans
-‎
-Group 3:
-:Fury:
- Lorlin
-:Feral:
- Formbytare
-:Fury:
- Ugge
-:Elemental:
- Cephalofair
-:Assassination:
- Quickfall
-‎
-Group 4:
-:Fury:
- Aktarare
-:Assassination:
- Artchi
-:Arms:
- Peggolina
-:Marksmanship:
- Vasslan
-:Retribution:
- Skogshelig
-‎
-Group 5:
-:Subtlety:
- Chizhera
-:Retribution:
- Bertholdt
-:Marksmanship:
- Jouthor
-:Combat:
- Fredzy
-:Marksmanship:
- Baldhunter
-‎
-Group 6:
-:Smite:
- Creato
-:Balance:
- Stompzilla
-:Arcane:
- Dundergullig
-:Arcane:
- Gnomegedon
-:Arcane:
- Arcaneyy
-‎
-Group 7:
-:Holy1:
- Krelle
-:Shadow:
- Heartstiller
-:Destruction:
- helldemon
-:Restoration:
- Taengil
-:Demonology:
- Burklock
-‎
-Group 8:
-:Restoration:
- Koerpoega
-:Restoration:
- Pamedi
-:Restoration:
- Pooras
-:Holy:
- Kexz
-:Marksmanship:
- Koretezzu`;
+    const exampleText = `{"slots":[{"specName":"Protection","color":"#C69B6D","slotNumber":1,"name":"Belladini","className":"Tank","specEmoteId":"637564444834136065","isConfirmed":"confirmed","id":"201314593920778241","classEmoteId":"580801859221192714","groupNumber":1},{"specName":"Protection","color":"#C69B6D","slotNumber":2,"name":"Tulik","className":"Tank","specEmoteId":"637564444834136065","isConfirmed":"unconfirmed","id":"473767735998808094","classEmoteId":"580801859221192714","groupNumber":1},{"specName":"Guardian","color":"#FF7C0A","slotNumber":3,"name":"Cliffholger","className":"Tank","specEmoteId":"637564171696734209","isConfirmed":"confirmed","id":"459082707440369665","classEmoteId":"580801859221192714","groupNumber":1},{"specName":"Protection1","color":"#F48CBA","slotNumber":4,"name":"Philliam","className":"Tank","specEmoteId":"637564297647489034","isConfirmed":"unconfirmed","id":"224953756624748544","classEmoteId":"580801859221192714","groupNumber":1},{"specName":"Elemental","color":"#0070DD","slotNumber":5,"name":"Julmusta","className":"Shaman","specEmoteId":"637564379595931649","isConfirmed":"confirmed","id":"138902222183464960","classEmoteId":"579532030056857600","groupNumber":1},{"specName":"Fury","color":"#C69B6D","slotNumber":1,"name":"Ugge","className":"Warrior","specEmoteId":"637564445215948810","isConfirmed":"confirmed","id":"282212588232769536","classEmoteId":"579532030153588739","groupNumber":2},{"specName":"Protection1","color":"#F48CBA","slotNumber":2,"name":"Trygghugg","className":"Tank","specEmoteId":"637564297647489034","isConfirmed":"unconfirmed","id":"186442838723002368","classEmoteId":"580801859221192714","groupNumber":2},{"specName":"Survival","color":"#AAD372","slotNumber":3,"name":"Grischnakh","className":"Hunter","specEmoteId":"637564202130866186","isConfirmed":"unconfirmed","id":"145295766842376192","classEmoteId":"579532029880827924","groupNumber":2},{"specName":"Assassination","color":"#FFF468","slotNumber":4,"name":"Quickfall","className":"Rogue","specEmoteId":"637564351707873324","isConfirmed":"confirmed","id":"1305920912079458374","classEmoteId":"579532030086217748","groupNumber":2},{"specName":"Restoration1","color":"#0070DD","slotNumber":5,"name":"Bubkez","className":"Shaman","specEmoteId":"637564379847458846","isConfirmed":"confirmed","id":"206842644956053514","classEmoteId":"579532030056857600","groupNumber":2},{"specName":"Fury","color":"#C69B6D","slotNumber":1,"name":"Peggolina","className":"Warrior","specEmoteId":"637564445215948810","isConfirmed":"confirmed","id":"254037279641829376","classEmoteId":"579532030153588739","groupNumber":3},{"specName":"Marksmanship","color":"#AAD372","slotNumber":2,"name":"Varning","className":"Hunter","specEmoteId":"637564202084466708","isConfirmed":"unconfirmed","id":"213552178185502720","classEmoteId":"579532029880827924","groupNumber":3},{"specName":"Fury","color":"#C69B6D","slotNumber":3,"name":"Kaviar","className":"Warrior","specEmoteId":"637564445215948810","isConfirmed":"confirmed","id":"475387408704208898","classEmoteId":"579532030153588739","groupNumber":3},{"specName":"Assassination","color":"#FFF468","slotNumber":4,"name":"Stenh","className":"Rogue","specEmoteId":"637564351707873324","isConfirmed":"unconfirmed","id":"374989671492485120","classEmoteId":"579532030086217748","groupNumber":3},{"specName":"Enhancement","color":"#0070DD","slotNumber":5,"name":"Intedrunkna","className":"Shaman","specEmoteId":"637564379772223489","isConfirmed":"confirmed","id":"75357793078476800","classEmoteId":"579532030056857600","groupNumber":3},{"specName":"Arms","color":"#C69B6D","slotNumber":1,"name":"Thalamus","className":"Warrior","specEmoteId":"637564445031399474","isConfirmed":"confirmed","id":"456752462548697099","classEmoteId":"579532030153588739","groupNumber":4},{"specName":"Marksmanship","color":"#AAD372","slotNumber":2,"name":"Imsojuicy","className":"Hunter","specEmoteId":"637564202084466708","isConfirmed":"confirmed","id":"272792142726955012","classEmoteId":"579532029880827924","groupNumber":4},{"specName":"Assassination","color":"#FFF468","slotNumber":3,"name":"Kroken","className":"Rogue","specEmoteId":"637564351707873324","isConfirmed":"confirmed","id":"210065346000977920","classEmoteId":"579532030086217748","groupNumber":4},{"specName":"Retribution","color":"#F48CBA","slotNumber":4,"name":"Ragsy","className":"Paladin","specEmoteId":"637564297953673216","isConfirmed":"confirmed","id":"205047320209915905","classEmoteId":"579532029906124840","groupNumber":4},{"specName":"Enhancement","color":"#0070DD","slotNumber":5,"name":"Modernatur","className":"Shaman","specEmoteId":"637564379772223489","isConfirmed":"confirmed","id":"338769299680526337","classEmoteId":"579532030056857600","groupNumber":4},{"specName":"Fury","color":"#C69B6D","slotNumber":1,"name":"Baradil","className":"Warrior","specEmoteId":"637564445215948810","isConfirmed":"confirmed","id":"275380964161486850","classEmoteId":"579532030153588739","groupNumber":5},{"specName":"Subtlety","color":"#FFF468","slotNumber":2,"name":"Chizhera","className":"Rogue","specEmoteId":"637564352169508892","isConfirmed":"confirmed","id":"235795526933676033","classEmoteId":"579532030086217748","groupNumber":5},{"specName":"Fury","color":"#C69B6D","slotNumber":3,"name":"Lorlin","className":"Warrior","specEmoteId":"637564445215948810","isConfirmed":"confirmed","id":"238701747525255169","classEmoteId":"579532030153588739","groupNumber":5},{"specName":"Assassination","color":"#FFF468","slotNumber":4,"name":"Artchi","className":"Rogue","specEmoteId":"637564351707873324","isConfirmed":"confirmed","id":"317808689602101249","classEmoteId":"579532030086217748","groupNumber":5},{"specName":"Restoration1","color":"#0070DD","slotNumber":5,"name":"Grotebelia","className":"Shaman","specEmoteId":"637564379847458846","isConfirmed":"confirmed","id":"335801131655757825","classEmoteId":"579532030056857600","groupNumber":5},{"specName":"Balance","color":"#FF7C0A","slotNumber":1,"name":"Numariel","className":"Druid","specEmoteId":"637564171994529798","isConfirmed":"confirmed","id":"214413931622432768","classEmoteId":"579532029675438081","groupNumber":6},{"specName":"Arcane","color":"#3FC7EB","slotNumber":2,"name":"Gnomegedon","className":"Mage","specEmoteId":"637564231545389056","isConfirmed":"confirmed","id":"227055701132836865","classEmoteId":"579532030161977355","groupNumber":6},{"specName":"Arcane","color":"#3FC7EB","slotNumber":3,"name":"Tordaan","className":"Mage","specEmoteId":"637564231545389056","isConfirmed":"confirmed","id":"160565666955395074","classEmoteId":"579532030161977355","groupNumber":6},{"specName":"Shadow","color":"#FFFFFF","slotNumber":4,"name":"Najkwiin(Nochin)","className":"Priest","specEmoteId":"637564323291725825","isConfirmed":"confirmed","id":"311294863931080704","classEmoteId":"579532029901799437","groupNumber":6},{"specName":"Elemental","color":"#0070DD","slotNumber":5,"name":"Ambulans","className":"Shaman","specEmoteId":"637564379595931649","isConfirmed":"unconfirmed","id":"898181734963748898","classEmoteId":"579532030056857600","groupNumber":6},{"specName":"Smite","color":"#FFFFFF","slotNumber":1,"name":"Creato","className":"Late","specEmoteId":"887257034066653184","isConfirmed":"unconfirmed","id":"97485300816683008","classEmoteId":"612373443551297689","groupNumber":7},{"specName":"Affliction","color":"#8788EE","slotNumber":2,"name":"Falcore","className":"Warlock","specEmoteId":"637564406984867861","isConfirmed":"confirmed","id":"554349327313797120","classEmoteId":"579532029851336716","groupNumber":7},{"specName":"Affliction","color":"#8788EE","slotNumber":3,"name":"Megazingo","className":"Warlock","specEmoteId":"637564406984867861","isConfirmed":"confirmed","id":"259062630633701378","classEmoteId":"579532029851336716","groupNumber":7},{"specName":"Affliction","color":"#8788EE","slotNumber":4,"name":"Sjuk","className":"Warlock","specEmoteId":"637564406984867861","isConfirmed":"unconfirmed","id":"553852116821868545","classEmoteId":"579532029851336716","groupNumber":7},{"specName":"Holy1","color":"#F48CBA","slotNumber":5,"name":"Thildra","className":"Bench","specEmoteId":"637564297622454272","isConfirmed":"confirmed","id":"268710144328728586","classEmoteId":"612373441051361353","groupNumber":7},{"specName":"Holy","color":"#FFFFFF","slotNumber":1,"name":"Kexz","className":"Priest","specEmoteId":"637564323530539019","isConfirmed":"unconfirmed","id":"1423437849063067758","classEmoteId":"579532029901799437","groupNumber":8},{"specName":"Holy","color":"#FFFFFF","slotNumber":2,"name":"Fuskpave","className":"Priest","specEmoteId":"637564323530539019","isConfirmed":"confirmed","id":"248115806573953024","classEmoteId":"579532029901799437","groupNumber":8},{"specName":"Holy1","color":"#F48CBA","slotNumber":3,"name":"Krelle","className":"Late","specEmoteId":"637564297622454272","isConfirmed":"unconfirmed","id":"108958537610190848","classEmoteId":"612373443551297689","groupNumber":8},{"specName":"Restoration","color":"#FF7C0A","slotNumber":4,"name":"Taengil","className":"Druid","specEmoteId":"637564172007112723","isConfirmed":"confirmed","id":"136195295976357888","classEmoteId":"579532029675438081","groupNumber":8},{"specName":"Holy1","color":"#F48CBA","slotNumber":5,"name":"Koldrick","className":"Paladin","specEmoteId":"637564297622454272","isConfirmed":"confirmed","id":"974719547674361896","classEmoteId":"579532029906124840","groupNumber":8},{"specName":"Protection","color":"#C69B6D","slotNumber":1,"name":"Fredx","className":"Tank","specEmoteId":"637564444834136065","isConfirmed":"cancelled","id":"539489904242065408","classEmoteId":"580801859221192714","groupNumber":9}],"groupCount":9,"showRoles":true,"slotCount":5,"editPermissions":"managers","classes":[{"specs":[{"color":"#AAD372","name":"Beastmastery","roleEmoteId":"592446395596931072","emoteId":"637564202021814277"},{"color":"#AAD372","name":"Marksmanship","roleEmoteId":"592446395596931072","emoteId":"637564202084466708"},{"color":"#AAD372","name":"Survival","roleEmoteId":"592446395596931072","emoteId":"637564202130866186"}],"name":"Hunter","emoteId":"579532029880827924"},{"specs":[{"color":"#FF7C0A","name":"Balance","roleEmoteId":"592446395596931072","emoteId":"637564171994529798"},{"color":"#FF7C0A","name":"Dreamstate","roleEmoteId":"592438128057253898","emoteId":"982381290663866468"},{"color":"#FF7C0A","name":"Feral","roleEmoteId":"734439523328720913","emoteId":"637564172061900820"},{"color":"#FF7C0A","name":"Restoration","roleEmoteId":"592438128057253898","emoteId":"637564172007112723"},{"color":"#FF7C0A","name":"Guardian","roleEmoteId":"598989638098747403","emoteId":"637564171696734209"}],"name":"Druid","emoteId":"579532029675438081"},{"specs":[{"color":"#C69B6D","name":"Arms","roleEmoteId":"734439523328720913","emoteId":"637564445031399474"},{"color":"#C69B6D","name":"Fury","roleEmoteId":"734439523328720913","emoteId":"637564445215948810"},{"color":"#C69B6D","name":"Protection","roleEmoteId":"598989638098747403","emoteId":"637564444834136065"}],"name":"Warrior","emoteId":"579532030153588739"},{"specs":[{"color":"#FFFFFF","name":"Discipline","roleEmoteId":"592438128057253898","emoteId":"637564323442720768"},{"color":"#FFFFFF","name":"Holy","roleEmoteId":"592438128057253898","emoteId":"637564323530539019"},{"color":"#FFFFFF","name":"Shadow","roleEmoteId":"592446395596931072","emoteId":"637564323291725825"},{"color":"#FFFFFF","name":"Smite","roleEmoteId":"592446395596931072","emoteId":"887257034066653184"}],"name":"Priest","emoteId":"579532029901799437"},{"specs":[{"color":"#3FC7EB","name":"Arcane","roleEmoteId":"592446395596931072","emoteId":"637564231545389056"},{"color":"#3FC7EB","name":"Fire","roleEmoteId":"592446395596931072","emoteId":"637564231239073802"},{"color":"#3FC7EB","name":"Frost","roleEmoteId":"592446395596931072","emoteId":"637564231469891594"}],"name":"Mage","emoteId":"579532030161977355"},{"specs":[{"color":"#0070DD","name":"Elemental","roleEmoteId":"592446395596931072","emoteId":"637564379595931649"},{"color":"#0070DD","name":"Enhancement","roleEmoteId":"734439523328720913","emoteId":"637564379772223489"},{"color":"#0070DD","name":"Restoration1","roleEmoteId":"592438128057253898","emoteId":"637564379847458846"}],"name":"Shaman","emoteId":"579532030056857600"},{"specs":[{"color":"#F48CBA","name":"Holy1","roleEmoteId":"592438128057253898","emoteId":"637564297622454272"},{"color":"#F48CBA","name":"Protection1","roleEmoteId":"598989638098747403","emoteId":"637564297647489034"},{"color":"#F48CBA","name":"Retribution","roleEmoteId":"734439523328720913","emoteId":"637564297953673216"}],"name":"Paladin","emoteId":"579532029906124840"},{"specs":[{"color":"#FFF468","name":"Assassination","roleEmoteId":"734439523328720913","emoteId":"637564351707873324"},{"color":"#FFF468","name":"Combat","roleEmoteId":"734439523328720913","emoteId":"637564352333086720"},{"color":"#FFF468","name":"Subtlety","roleEmoteId":"734439523328720913","emoteId":"637564352169508892"}],"name":"Rogue","emoteId":"579532030086217748"},{"specs":[{"color":"#C69B6D","name":"Protection","roleEmoteId":"598989638098747403","emoteId":"637564444834136065"},{"color":"#F48CBA","name":"Protection1","roleEmoteId":"598989638098747403","emoteId":"637564297647489034"},{"color":"#FF7C0A","name":"Guardian","roleEmoteId":"598989638098747403","emoteId":"637564171696734209"}],"name":"Tank","emoteId":"580801859221192714"},{"specs":[{"color":"#8788EE","name":"Affliction","roleEmoteId":"592446395596931072","emoteId":"637564406984867861"},{"color":"#8788EE","name":"Demonology","roleEmoteId":"592446395596931072","emoteId":"637564407001513984"},{"color":"#8788EE","name":"Destruction","roleEmoteId":"592446395596931072","emoteId":"637564406682877964"}],"name":"Warlock","emoteId":"579532029851336716"}],"groups":[{"name":"Group 1","position":1},{"name":"Group 2","position":2},{"name":"Group 3","position":3},{"name":"Group 4","position":4},{"name":"Group 5","position":5},{"name":"Group 6","position":6},{"name":"Group 7","position":7},{"name":"Group 8","position":8},{"name":"Bänk","position":9}],"id":"1469584750028001362","title":"Composition Tool","dividers":[],"showClasses":false}`;
 
-  loadExample.addEventListener('click', () => {
-    input.value = exampleText;
-    status.textContent = 'Example loaded.';
-  });
+    loadExample.addEventListener('click', () => {
+      input.value = exampleText;
+      status.textContent = 'Example loaded.';
+    });
 
-    function parseAndFormat(text) {
-    const lines = text.split(/\r?\n/);
-    const groups = {};
-    const ungrouped = [];
-    let currentGroup = null;
+      function parseAndFormat(input) {
 
-    function addPlayer(name) {
-        if (!name) return;
-        if (currentGroup !== null) {
-            groups[currentGroup].push(name);
-        } else {
-            ungrouped.push(name);
-        }
-    }
+        // ======================================
+        // TRY JSON FIRST
+        // ======================================
+        try {
+            const data = JSON.parse(input);
 
-    for (let raw of lines) {
-        let line = raw
-            .replace(/[\u00A0\u2000-\u200F\u2800\uFE0E\uFE0F]/g, ' ')
-            .trim();
+            if (data?.slots) {
+                return data.slots
+                    .filter(slot => slot.isConfirmed !== "cancelled")
+                    .map(slot => {
+                        const formattedName = slot.name
+                            ? slot.name.charAt(0).toUpperCase() + slot.name.slice(1).toLowerCase()
+                            : "";
 
-        if (!line) continue;
-
-        // ===============================
-        // GROUP HEADERS
-        // ===============================
-        const groupMatch = line.match(/^Group\s*(\d+)\s*:/i);
-        if (groupMatch) {
-            currentGroup = parseInt(groupMatch[1], 10);
-            groups[currentGroup] ||= [];
-            continue;
-        }
-
-        // ===============================
-        // SKIP CLASS HEADERS (":Warrior: Warrior (2)")
-        // ===============================
-        if (/^:[^:]+:\s+[^()]+\(\d+\)$/.test(line)) {
-            currentGroup = null;
-            continue;
-        }
-
-        // ===============================
-        // SKIP EMPTY SLOTS
-        // ===============================
-        if (/^[-—–]+$/.test(line)) continue;
-
-        // ===============================
-        // ATTENDANCE FORMAT
-        // ===============================
-        const attendanceMatch = line.match(
-            /^(?::(Confirmed|Cancelled):\s*)?(?::[^:]+:\s*)*(.+)$/
-        );
-
-        if (attendanceMatch && /Confirmed|Cancelled/.test(line)) {
-            const status = attendanceMatch[1];
-            const name = attendanceMatch[2]?.trim();
-
-            if (!name || status === 'Cancelled') continue;
-            addPlayer(name);
-            continue;
-        }
-
-        // ===============================
-        // LATE / TENTATIVE (comma-separated specs)
-        // ===============================
-        if (/^:(Late|Tentative):/i.test(line)) {
-            const parts = line.split(',');
-            for (const part of parts) {
-                const m = part.match(/:\s*\d+\s+(.+)$/);
-                if (m) addPlayer(m[1].trim());
+                        return `${slot.groupNumber} ${formattedName}`;
+                    })
+                    .join(',');
             }
-            continue;
+        } catch (e) {
+            // Not JSON → fall through to text parser
         }
 
-        // ===============================
-        // STANDARD SPEC LINE
-        // :Fury: 22 bishAo
-        // :Holy1: Thildra
-        // ===============================
-        const specMatch = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
-        if (specMatch) {
-            const name = specMatch[3].trim();
-            if (!/\(.+\)$/.test(name)) {
+        // ======================================
+        // TEXT FORMAT PARSER
+        // ======================================
+        const lines = input.split(/\r?\n/);
+        const groups = {};
+        const ungrouped = [];
+        let currentGroup = null;
+
+        function addPlayer(name) {
+            if (!name) return;
+            if (currentGroup !== null) {
+                groups[currentGroup] ||= [];
+                groups[currentGroup].push(name);
+            } else {
+                ungrouped.push(name);
+            }
+        }
+
+        for (let raw of lines) {
+            let line = raw
+                .replace(/[\u00A0\u2000-\u200F\u2800\uFE0E\uFE0F]/g, ' ')
+                .trim();
+
+            if (!line) continue;
+
+            const groupMatch = line.match(/^Group\s*(\d+)\s*:/i);
+            if (groupMatch) {
+                currentGroup = parseInt(groupMatch[1], 10);
+                groups[currentGroup] ||= [];
+                continue;
+            }
+
+            if (/^:[^:]+:\s+[^()]+\(\d+\)$/.test(line)) {
+                currentGroup = null;
+                continue;
+            }
+
+            if (/^[-—–]+$/.test(line)) continue;
+
+            const attendanceMatch = line.match(
+                /^(?::(Confirmed|Cancelled):\s*)?(?::[^:]+:\s*)*(.+)$/
+            );
+
+            if (attendanceMatch && /(Confirmed|Cancelled|Absence|Absent|NoShow)/i.test(line)) {
+                const status = attendanceMatch[1];
+                const name = attendanceMatch[2]?.trim();
+
+                // Skip cancelled or absence types
+                if (
+                    !name ||
+                    /Cancelled|Absence|Absent|NoShow/i.test(line)
+                ) continue;
+
                 addPlayer(name);
+                continue;
             }
-            continue;
+
+            if (/^:(Late|Tentative|Bench):/i.test(line)) {
+                const regex = /:\s*\d+\s+([^,]+)/g;
+                let match;
+                while ((match = regex.exec(line)) !== null) {
+                    addPlayer(match[1].trim());
+                }
+                continue;
+            }
+
+            const specMatch = line.match(/^:([^:]+):\s*(\d+)?\s*(.+)$/);
+            if (specMatch) {
+                const name = specMatch[3].trim();
+                if (!/\(.+\)$/.test(name)) {
+                    addPlayer(name);
+                }
+            }
         }
-    }
 
-    // ===============================
-    // ENSURE 8 GROUPS
-    // ===============================
-    for (let i = 1; i <= 8; i++) groups[i] ||= [];
-
-    // ===============================
-    // FILL UNGROUPED
-    // ===============================
-    let gi = 1;
-    for (const name of ungrouped) {
-        while (gi <= 8 && groups[gi].length >= 5) gi++;
-        if (gi > 8) break;
-        groups[gi].push(name);
-    }
-
-    // ===============================
-    // OUTPUT
-    // ===============================
-    const output = [];
-    for (let i = 1; i <= 8; i++) {
-        for (const name of groups[i]) {
-            output.push(`${i} ${name}`);
+        // Ensure 8 groups
+        for (let i = 1; i <= 8; i++) {
+            groups[i] ||= [];
         }
-    }
 
-    return output.join(',');
-}
+        // Fill ungrouped into available spots
+        let gi = 1;
+        for (const name of ungrouped) {
+            while (gi <= 8 && groups[gi].length >= 5) gi++;
+            if (gi > 8) break;
+            groups[gi].push(name);
+        }
+
+        // Output
+        const output = [];
+        for (let i = 1; i <= 8; i++) {
+            for (const name of groups[i]) {
+                output.push(`${i} ${name}`);
+            }
+        }
+
+        return output.join(',');
+    }
 
   transformBtn.addEventListener('click', () => {
     try {
       const result = parseAndFormat(input.value);
       output.value = result;
-      status.textContent = `Transformed — ${ result ? result.split(',').length : 0 } entries.`;
+      status.textContent = `Transformed - ${ result ? result.split(',').length : 0 } entries.`;
     } catch (err) {
       console.error(err);
       status.textContent = 'Error during transform — see console.';
@@ -320,21 +361,8 @@ Group 8:
     status.textContent = 'Cleared.';
   });
 
-  downloadBtn.addEventListener('click', () => {
-    const blob = new Blob([output.value], {type: 'text/plain;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rai-formatted.txt';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    status.textContent = 'Downloaded rai-formatted.txt';
-  });
-
   input.value = exampleText;
-})();
+  })();
 </script>
 </body>
 </html>
