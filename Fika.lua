@@ -3,7 +3,7 @@ Fika.Import = CreateFrame("Frame","FI",UIParent)
 Fika.Export = CreateFrame("Frame","FE",UIParent)
 Fika.Roster = CreateFrame("Frame","FR",UIParent)
 Fika.Invite = CreateFrame("Frame","FINV",UIParent)
-Fika.WantsInvite = CreateFrame("Frame","FWINV",UIParent)
+Fika.Waitlist = CreateFrame("Frame","FWINV",UIParent)
 Fika.Options = CreateFrame("Frame","FO",UIParent)
 
 tinsert(UISpecialFrames, "FI")
@@ -661,8 +661,9 @@ local function Plus(arg1, arg2, from)
 			if isRosterEmpty then
 				if raidCount < 40 then
 					InviteByName(sender)
-					SendChatMessage("Inviting.", "WHISPER", nil, sender)
+					--SendChatMessage("Inviting.", "WHISPER", nil, sender)
 				else
+					
 					if from == "Guild" then
 						SendChatMessage("Raidgroup is currently full.", "GUILD")
 					elseif from == "Whisper" then
@@ -686,8 +687,8 @@ local function Plus(arg1, arg2, from)
 						SendChatMessage("Inviting.", "WHISPER", nil, sender)
 					else
 						table.insert(FIKA_NotInRoster, sender)
-						Fika.WantsInvite:UpdateScrollList()
-						Fika.WantsInvite:Show()
+						Fika.Waitlist:UpdateScrollList()
+						Fika.Waitlist:Show()
 
 						if from == "Guild" then
 							SendChatMessage("Raidgroup is currently full.", "GUILD")
@@ -696,6 +697,7 @@ local function Plus(arg1, arg2, from)
 						end
 					end
                 else
+					
 					if raidCount > 39 then
 						if from == "Guild" then
 							SendChatMessage("Raidgroup is currently full.", "GUILD")
@@ -713,8 +715,8 @@ local function Plus(arg1, arg2, from)
 					if not found then
 						SendChatMessage("You are not on the roster, adding you to the waitlist.", "WHISPER", nil, sender)
 						table.insert(FIKA_NotInRoster, sender)
-						Fika.WantsInvite:UpdateScrollList()
-						Fika.WantsInvite:Show()
+						Fika.Waitlist:UpdateScrollList()
+						Fika.Waitlist:Show()
 					end
                 end
             end
@@ -934,7 +936,9 @@ local function InviteTimer_OnClick()
 					InviteRoster()
 					FIKA_Settings["inv"] = true
 					Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
-					Fika.WantsInvite:Show()
+					Fika.Waitlist:Show()
+					print("Invites - [|cff00ff00ON|r]")
+					print("Invite keyword - '"..FIKA_Settings["keyword"].."'")
 
 					inviteTimerFrame:SetScript("OnUpdate", nil)
 					inviteTimerFrame = nil
@@ -1161,10 +1165,10 @@ function Fika:OnEvent()
 		Fika.Export:Gui()
 		Fika.Roster:Gui()
 		Fika.Invite:Gui()
-		Fika.WantsInvite:Gui()
+		Fika.Waitlist:Gui()
 
 		if FIKA_Settings["inv"] == true then
-			Fika.WantsInvite:Show()
+			Fika.Waitlist:Show()
 		end
 
 		if FIKA_Settings["guild"] == true then
@@ -1187,8 +1191,9 @@ function Fika:OnEvent()
 
 		if string.find(arg1,"You leave the group.") then
 			FIKA_Settings["inv"] = false
-			Fika.WantsInvite:Hide()
+			Fika.Waitlist:Hide()
 			Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
+			print("Invites - [|cffff0000OFF|r]")
 		end
 
 	elseif event == "CHAT_MSG_GUILD" then
@@ -1509,7 +1514,9 @@ function Fika.Invite:Gui()
 					InviteRoster()
 					FIKA_Settings["inv"] = true
 					Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
-					Fika.WantsInvite:Show()
+					Fika.Waitlist:Show()
+					print("Invites - [|cff00ff00ON|r]")
+					print("Invite keyword - '"..FIKA_Settings["keyword"].."'")
 
 					if inviteTimerRunning then
 						InviteTimer_OnClick() -- stop timer
@@ -1530,14 +1537,14 @@ function Fika.Invite:Gui()
 	self:Hide()
 end
 
-function Fika.WantsInvite:Gui()
+function Fika.Waitlist:Gui()
 	
-	Fika.WantsInvite.Drag = { }
-	function Fika.WantsInvite.Drag:StartMoving()
+	Fika.Waitlist.Drag = { }
+	function Fika.Waitlist.Drag:StartMoving()
 		this:StartMoving()
 	end
 	
-	function Fika.WantsInvite.Drag:StopMovingOrSizing()
+	function Fika.Waitlist.Drag:StopMovingOrSizing()
 		this:StopMovingOrSizing()
 	end
 
@@ -1562,8 +1569,8 @@ function Fika.WantsInvite:Gui()
 	self:SetMovable(1)
 	self:EnableMouse(1)
 	self:RegisterForDrag("LeftButton")
-	self:SetScript("OnDragStart", Fika.WantsInvite.Drag.StartMoving)
-	self:SetScript("OnDragStop", Fika.WantsInvite.Drag.StopMovingOrSizing)
+	self:SetScript("OnDragStart", Fika.Waitlist.Drag.StartMoving)
+	self:SetScript("OnDragStop", Fika.Waitlist.Drag.StopMovingOrSizing)
 	self:SetBackdrop(backdrop)
 	self:SetBackdropColor(0,0,0,1);
 	
@@ -1572,7 +1579,7 @@ function Fika.WantsInvite:Gui()
 	self.InviteHeader:SetFont("Fonts\\FRIZQT__.TTF", 12)
 	self.InviteHeader:SetTextColor(1, 1, 1, 1)
 	self.InviteHeader:SetShadowOffset(2,-2)
-	self.InviteHeader:SetText("|cff00ff00Invite?|r")
+	self.InviteHeader:SetText("|cff00ff00Waitlist|r")
 
 	-- scrollframe
 	self.ScrollFrame = CreateFrame("ScrollFrame","InviteScrollFrame",self,"UIPanelScrollFrameTemplate")
@@ -2069,11 +2076,14 @@ function Fika.Roster:Gui()
 	self.InvCheckbox:SetScript("OnClick", function ()
 		if self.InvCheckbox:GetChecked() == nil then 
 			FIKA_Settings["inv"] = false
-			Fika.WantsInvite:Hide()
+			Fika.Waitlist:Hide()
+			print("Invites - [|cffff0000OFF|r]")
 
 		elseif self.InvCheckbox:GetChecked() == 1 then
 			FIKA_Settings["inv"] = true
-			Fika.WantsInvite:Show()
+			Fika.Waitlist:Show()
+			print("Invites - [|cff00ff00ON|r]")
+			print("Invite keyword - '"..FIKA_Settings["keyword"].."'")
 		end
 	end)
 	
@@ -2182,7 +2192,6 @@ function Fika.Roster:Gui()
 	self.textGuild:SetShadowOffset(2,-2)
     self.textGuild:SetText("Roster guild check\nPreraid & Assist squad")
 
-	--test
 	local backdrop1 = {
 		edgeFile = "Interface/DialogFrame/UI-DialogBox-Border",
 		bgFile = "Interface/DialogFrame/UI-DialogBox-Background",
@@ -2468,8 +2477,30 @@ function Fika.slash(arg1)
 		print("|cff00ff00Version:|r "..FIKA_VERSION)
 		print("|cff3399ffCommands:|r")
 		print("'/fika' - Toggle roster frame")
+		print("'/fika inv' - Toggle invites "..(FIKA_Settings["inv"] and "[|cff00ff00ON|r]" or "[|cffff0000OFF|r]"))
+		print("'/fika clear' - Clear the roster list")
         return
     end
+
+	if arg1 == "inv" then
+		if FIKA_Settings["inv"] == false then
+			FIKA_Settings["inv"] = true
+			Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
+			Fika.Waitlist:Show()
+			print("Invites - [|cff00ff00ON|r]")
+			print("Invite keyword - '"..FIKA_Settings["keyword"].."'")
+		else
+			FIKA_Settings["inv"] = false
+			Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
+			Fika.Waitlist:Hide()
+			print("Invites - [|cffff0000OFF|r]")
+		end
+	end
+
+	if arg1 == "clear" then
+		ClearRoster()
+		UpdateRoster()
+	end
 
 	if arg1 == nil or arg1 == "" then
 		if Fika.Roster:IsVisible() then
