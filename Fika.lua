@@ -1193,7 +1193,7 @@ function Fika:OnEvent()
 			FIKA_Settings["inv"] = false
 			Fika.Waitlist:Hide()
 			Fika.Roster.InvCheckbox:SetChecked(FIKA_Settings["inv"])
-			print("Invites - [|cffff0000OFF|r]")
+			--print("Invites - [|cffff0000OFF|r]")
 		end
 
 	elseif event == "CHAT_MSG_GUILD" then
@@ -2515,4 +2515,5 @@ end
 
 SlashCmdList["FIKA_SLASH"] = Fika.slash
 SLASH_FIKA_SLASH1 = "/fika"
+
 
