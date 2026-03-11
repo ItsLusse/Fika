@@ -684,7 +684,7 @@ local function Plus(arg1, arg2, from)
                 if rosterLookup[sender] then
 					if raidCount < 40 then
 						InviteByName(sender)
-						SendChatMessage("Inviting.", "WHISPER", nil, sender)
+						--SendChatMessage("Inviting.", "WHISPER", nil, sender)
 					else
 						table.insert(FIKA_NotInRoster, sender)
 						Fika.Waitlist:UpdateScrollList()
@@ -2515,3 +2515,4 @@ end
 
 SlashCmdList["FIKA_SLASH"] = Fika.slash
 SLASH_FIKA_SLASH1 = "/fika"
+
