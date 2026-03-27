@@ -4,14 +4,11 @@ Fika.Export = CreateFrame("Frame","FE",UIParent)
 Fika.Roster = CreateFrame("Frame","FR",UIParent)
 Fika.Invite = CreateFrame("Frame","FINV",UIParent)
 Fika.Waitlist = CreateFrame("Frame","FWINV",UIParent)
-Fika.Options = CreateFrame("Frame","FO",UIParent)
 
 tinsert(UISpecialFrames, "FI")
 tinsert(UISpecialFrames, "FE")
 tinsert(UISpecialFrames, "FR")
 tinsert(UISpecialFrames, "FINV")
---tinsert(UISpecialFrames, "RWINV")
-tinsert(UISpecialFrames, "FO")
 
 -- Version from .toc file 
 FIKA_VERSION = GetAddOnMetadata("Fika", "Version") -- Grab version from .toc
@@ -30,7 +27,6 @@ local delay = 1
 local isEventActive = false
 
 local pingdelay = GetTime()
-
 
 local inviteTimerFrame = nil
 local inviteTimerRunning = false
@@ -79,6 +75,34 @@ local function GetClassColorForName(class)
 	end
 end
 
+function ImportFromJSON(json)
+    local result = {}
+
+    for slotBlock in string.gfind(json, "{(.-)}") do
+        local group = nil
+        local name = nil
+
+        -- extract groupNumber
+        local _, _, g = string.find(slotBlock, '"groupNumber"%s*:%s*(%d+)')
+        if g then
+            group = tonumber(g)
+        end
+
+        -- extract name
+        local _, _, n = string.find(slotBlock, '"name"%s*:%s*"([^"]+)"')
+        if n then
+            name = n
+        end
+
+        -- only insert valid entries (ignore non-slot objects)
+        if group and name then
+            table.insert(result, group.." "..name)
+        end
+    end
+
+    return table.concat(result, ",")
+end
+
 local function strSplit(str, delimiter)
     if not str then return nil end
     delimiter = delimiter or ":"
@@ -91,6 +115,38 @@ local function strSplit(str, delimiter)
     end)
 
     return fields
+end
+
+local function SplitAliases(name)
+    local t = {}
+    for part in string.gfind(name, "([^/]+)") do
+        table.insert(t, part)
+    end
+    return t
+end
+
+local function IsSamePlayer(plannedName, actualName)
+    for _, alias in ipairs(SplitAliases(plannedName)) do
+        if alias == actualName then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetMainName(name)
+    for part in string.gfind(name, "([^/]+)") do
+        return part
+    end
+end
+
+local function NormalizeName(playerName)
+    playerName = string.lower(playerName)
+    playerName = string.gsub(playerName, "^%l", string.upper)
+    playerName = string.gsub(playerName, "/(%l)", function(c)
+        return "/"..string.upper(c)
+    end)
+    return playerName
 end
 
 local function ClearRoster()
@@ -166,12 +222,12 @@ end
 local function UpdateRoster()
     local raidMembers = {}
     local numRaidMembers = GetNumRaidMembers()
-
     local subgroupPlayers = {}
     for g = 1, 8 do
         subgroupPlayers[g] = {}
     end
 
+    -- Build raid members table
     for i = 1, numRaidMembers do
         local name, _, subgroup, _, class, _, _, online, isDead = GetRaidRosterInfo(i)
         if name and class then
@@ -179,7 +235,7 @@ local function UpdateRoster()
                 class = class,
                 online = online,
                 group = subgroup,
-				dead = isDead,
+                dead = isDead
             }
             if subgroup and subgroup >= 1 and subgroup <= 8 then
                 table.insert(subgroupPlayers[subgroup], name)
@@ -187,109 +243,33 @@ local function UpdateRoster()
         end
     end
 
-    local groupsWithFreeSlot = {}
-    local plannedCounts = {}
-
-    for g = 1, 8 do
-        local count = 0
-        local roster = FIKA_Roster[g] or {}
-        for i = 1, 5 do
-            if roster[i] then
-                count = count + 1
+    local function GetActiveAliases(plannedName)
+        local active = {}
+        for _, alias in ipairs(SplitAliases(plannedName)) do
+            if raidMembers[alias] then
+                table.insert(active, alias)
             end
         end
-        plannedCounts[g] = count
-        if count < 5 then
-            table.insert(groupsWithFreeSlot, g)
-        end
+        return active
     end
 
-    for g = 1, 8 do
-        local roster = FIKA_Roster[g] or {}
-
-        local actualCount = 0
-        for _, name in ipairs(subgroupPlayers[g]) do
-            actualCount = actualCount + 1
-        end
-        local plannedcount = plannedCounts[g]
-
-        if actualCount > plannedcount then
-
-            if plannedcount >= 5 then
-
-                for _, playerName in ipairs(subgroupPlayers[g]) do
-                    local isPlanned = false
-                    for i = 1, 5 do
-                        if roster[i] == playerName then
-                            isPlanned = true
-                            break
-                        end
-                    end
-                    if not isPlanned then
-
-                        if table.getn(groupsWithFreeSlot) > 0 then
-                            local targetGroup = groupsWithFreeSlot[1]
-
-                            local idx = nil
-
-                            for i = 1, numRaidMembers do
-                                local nm, _, _, _, _, _, _, _ = GetRaidRosterInfo(i)
-                                if nm == playerName then
-                                    idx = i
-                                    break
-                                end
-                            end
-                            if idx then
-                                SetRaidSubgroup(idx, targetGroup)
-
-                                local removeIndex = nil
-                                for ii, nm in ipairs(subgroupPlayers[g]) do
-                                    if nm == playerName then
-                                        removeIndex = ii
-                                        break
-                                    end
-                                end
-                                if removeIndex then
-                                    table.remove(subgroupPlayers[g], removeIndex)
-                                end
-
-                                table.insert(subgroupPlayers[targetGroup], playerName)
-
-                                plannedCounts[targetGroup] = plannedCounts[targetGroup]
-
-                                if plannedCounts[targetGroup] + 1 >= 5 then
-
-                                    for ii, gv in ipairs(groupsWithFreeSlot) do
-                                        if gv == targetGroup then
-                                            table.remove(groupsWithFreeSlot, ii)
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
+    -- Process each group
     for group = 1, 8 do
         local plannedRoster = FIKA_Roster[group] or {}
         local fontStrings = Fika.Roster.GroupMembers[group]
         local actualPlayers = subgroupPlayers[group] or {}
 
+        -- Build unplanned players list
         local unplannedPlayers = {}
-        for _, pname in ipairs(actualPlayers) do
-            local found = false
-            for _, plannedName in ipairs(plannedRoster) do
-                if pname == plannedName then
-                    found = true
-                    break
-                end
+        local plannedSet = {}
+        for _, pname in ipairs(plannedRoster) do
+            for _, alias in ipairs(SplitAliases(pname)) do
+                plannedSet[alias] = true
             end
-            if not found then
-                table.insert(unplannedPlayers, pname)
+        end
+        for _, aname in ipairs(actualPlayers) do
+            if not plannedSet[aname] then
+                table.insert(unplannedPlayers, aname)
             end
         end
 
@@ -299,20 +279,18 @@ local function UpdateRoster()
                 plannedCount = plannedCount + 1
             end
         end
-
         local freeSlots = 5 - plannedCount
         local unplannedIndex = 1
         local plannedUnplannedPairs = {}
 
-        local function isPlannedNameInRaid(name)
-            return raidMembers[name] ~= nil
-        end
-
+        -- Assign spillover unplanned players to planned slots if more than 5 total
         if plannedCount + table.getn(unplannedPlayers) > 5 then
             local extraCount = (plannedCount + table.getn(unplannedPlayers)) - 5
             for i = 1, plannedCount do
                 local pnm = plannedRoster[i]
-                if not isPlannedNameInRaid(pnm) then
+                local activeAliases = GetActiveAliases(pnm)
+                local mainName = activeAliases[1] or pnm
+                if raidMembers[mainName] == nil then
                     if unplannedIndex <= table.getn(unplannedPlayers) and extraCount > 0 then
                         plannedUnplannedPairs[i] = unplannedPlayers[unplannedIndex]
                         unplannedIndex = unplannedIndex + 1
@@ -322,46 +300,60 @@ local function UpdateRoster()
             end
         end
 
+        -- Fill the 5 slots
         for i = 1, 5 do
             local fontString = fontStrings[i]
             if fontString then
                 local pnm = plannedRoster[i]
                 local txt
+
                 if pnm then
-                    local info = raidMembers[pnm]
-                    local ccol = info and GetClassColorForName(info.class) or "|cff888888"
-                    txt = ccol..pnm.."|r"
-                    if info then
-                        if not info.online then
-                            txt = txt.." - |cffff0000Off|r"
+                    -- Planned slot
+                    local activeAliases = GetActiveAliases(pnm)
+                    local mainName = activeAliases[1] or pnm
+                    local info = raidMembers[mainName]
+                    local color = info and GetClassColorForName(info.class) or "|cff888888"
+                    txt = color..mainName.."|r"
+
+                    -- Append other aliases if any
+                    for j = 2, table.getn(activeAliases) do
+                        local a = activeAliases[j]
+                        local ainfo = raidMembers[a]
+                        local acolor = ainfo and GetClassColorForName(ainfo.class) or "|cff888888"
+                        local atext = acolor..a.."|r"
+                        if ainfo then
+                            if not ainfo.online then atext = atext.." - |cffff0000Off|r" end
+                            if ainfo.dead then atext = atext.." - |cffff0000Dead|r" end
+                            if ainfo.group ~= group then
+                                atext = "|cffffff00("..ainfo.group..")|r - "..atext
+                            end
                         end
-                        if info.group ~= group then
-                            txt = "|cffffff00("..info.group..")|r - "..txt
-                        end
-						if info.dead then
-                            txt = txt.." - |cffff0000Dead|r"
-                        end
+                        txt = txt.." |cffffff00| |r"..atext
                     end
+
+                    -- Add main info
+                    if info then
+                        if not info.online then txt = txt.." - |cffff0000Off|r" end
+                        if info.dead then txt = txt.." - |cffff0000Dead|r" end
+                        if info.group ~= group then txt = "|cffffff00("..info.group..")|r - "..txt end
+                    end
+
+                    -- Append paired unplanned if exists
                     if plannedUnplannedPairs[i] then
                         local un = plannedUnplannedPairs[i]
                         local uinfo = raidMembers[un]
                         local ucol = uinfo and GetClassColorForName(uinfo.class) or "|cff888888"
                         local utext = ucol..un.."|r"
                         if uinfo then
-                            if not uinfo.online then
-                                utext = utext.." - |cffff0000Off|r"
-                            end
-                            if uinfo.group ~= group then
-                                utext = "|cffffff00("..uinfo.group..")|r - "..utext
-                            end
-							if uinfo.dead then
-                            	utext = utext.." - |cffff0000Dead|r"
-                        	end
+                            if not uinfo.online then utext = utext.." - |cffff0000Off|r" end
+                            if uinfo.dead then utext = utext.." - |cffff0000Dead|r" end
+                            if uinfo.group ~= group then utext = "|cffffff00("..uinfo.group..")|r - "..utext end
                         end
                         txt = txt.." |cffffff00| |r"..utext
                     end
-                else
 
+                else
+                    -- Empty slot → fill unplanned player
                     if unplannedIndex <= table.getn(unplannedPlayers) and freeSlots > 0 then
                         local un = unplannedPlayers[unplannedIndex]
                         unplannedIndex = unplannedIndex + 1
@@ -370,116 +362,125 @@ local function UpdateRoster()
                         local ucol = uinfo and GetClassColorForName(uinfo.class) or "|cff888888"
                         txt = "|cffff0000---|r "..ucol..un.."|r"
                         if uinfo then
-                            if not uinfo.online then
-                                txt = txt.." - |cffff0000Off|r"
-                            end
-                            if uinfo.group ~= group then
-                                txt = "|cffffff00("..uinfo.group..")|r - "..txt
-                            end
-							if uinfo.dead then
-                                txt = "|cffffff00("..uinfo.group..")|r - "..txt
-                            end
+                            if not uinfo.online then txt = txt.." - |cffff0000Off|r" end
+                            if uinfo.dead then txt = txt.." - |cffff0000Dead|r" end
+                            if uinfo.group ~= group then txt = "|cffffff00("..uinfo.group..")|r - "..txt end
                         end
                     else
                         txt = "|cffff0000---|r"
                     end
                 end
 
+                -- Set font string
                 if fontString:GetText() ~= txt then
-					fontString:SetText(TruncateColoredText(txt, 19))
+                    fontString:SetText(txt)
+                end
+
+                -- Button
+                local btn = Fika.Roster.GroupButtons[group] and Fika.Roster.GroupButtons[group][i]
+                if btn then
+                    if plannedRoster[i] then
+                        btn:Show()
+                    else
+                        btn:Hide()
+                    end
                 end
             end
-
-			-- Button
-			local btn = Fika.Roster.GroupButtons[group] and Fika.Roster.GroupButtons[group][i]
-			if btn then
-				if plannedRoster[i] then
-					btn:Show()
-				else
-					btn:Hide()
-				end
-			end
         end
     end
 end
 
 local function ImportRoster(str)
-	local names = strSplit(str, ",")
+    local names = strSplit(str, ",")
 
-	local count = 0
-	local totalcount = 0
-	local duplicates = 0
+    local count = 0
+    local totalcount = 0
+    local duplicates = 0
 
-	for _, name in ipairs(names) do
-		local group = tonumber(string.sub(name, 1, 1))
-		local playerName = string.sub(name, 2)
-		playerName = string.lower(playerName)
-		playerName = string.gsub(playerName, "^%l", string.upper)
+    for _, entry in ipairs(names) do
+        entry = string.gsub(entry, "^%s*(.-)%s*$", "%1") -- trim
 
-		if group and playerName ~= "" then
-			if not FIKA_Roster[group] then
-				FIKA_Roster[group] = {}
-			end
+        -- FIX: supports multi-digit groups (e.g. 10)
+        local _, _, groupStr, playerName = string.find(entry, "^(%d+)%s*(.+)$")
+        local group = tonumber(groupStr)
 
-			local existingGroup = nil
+        if group and playerName and playerName ~= "" then
+            playerName = NormalizeName(playerName)
+            local mainName = GetMainName(playerName)
 
-			for groupNum = 1, 8 do
-				local groupTable = FIKA_Roster[groupNum]
-				if groupTable then
-					for index, existingName in ipairs(groupTable) do
-						if existingName == playerName then
-							existingGroup = groupNum
+            if not FIKA_Roster[group] then
+                FIKA_Roster[group] = {}
+            end
 
-							if groupNum ~= group then
-								table.remove(groupTable, index)
-							end
+            local existingGroup = nil
+            local existingIndex = nil
 
-							break
-						end
-					end
-				end
-			end
+            -- Check all groups for duplicates (by MAIN name)
+            for groupNum = 1, 10 do
+                local groupTable = FIKA_Roster[groupNum]
+                if groupTable then
+                    for index, existingName in ipairs(groupTable) do
+                        if GetMainName(existingName) == mainName then
+                            existingGroup = groupNum
+                            existingIndex = index
 
-			if existingGroup == group then
-				duplicates = duplicates + 1
-			else
+                            -- Move if different group
+                            if groupNum ~= group then
+                                table.remove(groupTable, index)
+                            end
 
-				local groupSize = 0
-				for _ in ipairs(FIKA_Roster[group]) do
-					groupSize = groupSize + 1
-				end
+                            break
+                        end
+                    end
+                end
+                if existingGroup then break end
+            end
 
-				if groupSize < 5 then
-					table.insert(FIKA_Roster[group], playerName)
-					count = count + 1
-				else
-					print("|cffff0000Import failed|r: Group "..group.." is full. Skipping "..playerName..".")
-				end
-			end
-		end
-	end
+            if existingGroup == group then
+                duplicates = duplicates + 1
+            else
+                -- Count group size
+                local groupSize = 0
+                for _ in ipairs(FIKA_Roster[group]) do
+                    groupSize = groupSize + 1
+                end
 
-	if count == 0 then
-		if duplicates > 0 then
-			print("|cffff0000Import failed|r: "..duplicates.." duplicate name(s) found.")
-		else
-			print("|cffff0000Imported|r: 0 player.")
-		end
-	elseif count == 1 then
-		print("|cff00ff00Added|r: 1 player.")
-	else
-		print("|cff00ff00Added|r: "..count.." players.")
-	end
+                if groupSize < 5 then
+                    table.insert(FIKA_Roster[group], playerName)
+                    count = count + 1
+                else
+                    print("|cffff0000Import failed|r: Group "..group.." is full. Skipping "..playerName..".")
+                end
+            end
+        else
+            print("|cffff0000Import failed|r: Invalid entry: "..entry)
+            return
+        end
+    end
 
-	for group, players in pairs(FIKA_Roster) do
-		for _ in ipairs(players) do
-			totalcount = totalcount + 1
-		end
-	end
+    -- Feedback
+    if count == 0 then
+        if duplicates > 0 then
+            print("|cffff0000Import failed|r: "..duplicates.." duplicate name(s) found.")
+        else
+            print("|cffff0000Imported|r: 0 player.")
+        end
+    elseif count == 1 then
+        print("|cff00ff00Added|r: 1 player.")
+    else
+        print("|cff00ff00Added|r: "..count.." players.")
+    end
 
-	print("|cff00ccffTotal players in the roster|r: "..totalcount)
+    -- Count total players
+    for group, players in pairs(FIKA_Roster) do
+        for _ in ipairs(players) do
+            totalcount = totalcount + 1
+        end
+    end
 
-	UpdateRoster()
+    print("|cff00ccffTotal players in the roster|r: "..totalcount)
+
+    UpdateRoster()
 end
 
 local function ImportFromRaid()
@@ -545,8 +546,8 @@ local function RemoveFromRoster(str)
 			playerName = name
 		end
 
-		playerName = string.lower(playerName)
-		playerName = string.gsub(playerName, "^%l", string.upper)
+		--playerName = string.lower(playerName)
+		--playerName = string.gsub(playerName, "^%l", string.upper)
 
 		if playerName ~= "" then
 			local found = false
@@ -676,7 +677,23 @@ local function Plus(arg1, arg2, from)
             local rosterLookup = {}
             for group, players in pairs(FIKA_Roster) do
                 for _, playerName in ipairs(players) do
-                    rosterLookup[playerName] = true
+					-- playerName could be "Cliffholger/Acetonsture"
+					if string.find(playerName, "/") then
+						local start = 1
+						while true do
+							local sepStart, sepEnd = string.find(playerName, "/", start)
+							if not sepStart then
+								local alias = string.sub(playerName, start)
+								rosterLookup[alias] = true
+								break
+							end
+							local alias = string.sub(playerName, start, sepStart - 1)
+							rosterLookup[alias] = true
+							start = sepEnd + 1
+						end
+					else
+						rosterLookup[playerName] = true
+					end
                 end
             end
 
@@ -718,6 +735,9 @@ local function Plus(arg1, arg2, from)
 						Fika.Waitlist:UpdateScrollList()
 						Fika.Waitlist:Show()
 					end
+					if found then
+						SendChatMessage("You are already on the waitlist.", "WHISPER", nil, sender)
+					end
                 end
             end
         end
@@ -727,19 +747,23 @@ end
 local function OfficerRoster()
     local Officers = {}
     local Classleaders = {}
- 
+
     if not FIKA_Roster then
         return Officers, Classleaders
     end
 
+    -- Build a set of all aliases in the roster
     local nameSet = {}
-    for group, nameList in pairs(FIKA_Roster) do
+    for _, nameList in pairs(FIKA_Roster) do
         for _, name in ipairs(nameList) do
-            nameSet[name] = true
+            local aliases = SplitAliases(name)
+            for _, alias in ipairs(aliases) do
+                nameSet[alias] = true
+            end
         end
     end
 
-	GuildRoster()
+    GuildRoster()
     for i = 1, GetNumGuildMembers() do
         local name, _, rankIndex = GetGuildRosterInfo(i)
         if name and nameSet[name] then
@@ -815,44 +839,47 @@ local function SquadMember(squadName, listTable, name)
 end
 
 local function InviteRoster()
-	if UnitName("party1") then
-		if not GetRaidRosterInfo(1) then
-			ConvertToRaid()
-		end
-	end
+    -- Convert to raid if in a party
+    if UnitName("party1") then
+        if not GetRaidRosterInfo(1) then
+            ConvertToRaid()
+        end
+    end
 
-	local roster = FIKA_Roster
+    local roster = FIKA_Roster
     if IsShiftKeyDown() and FIKA_Preraid then
         roster = FIKA_Preraid
     end
 
-	local normalizedRoster = {}
-
+    local normalizedRoster = {}
     if type(roster[1]) == "string" then
         normalizedRoster[1] = roster
     else
         normalizedRoster = roster
     end
 
-	for group, players in pairs(normalizedRoster) do
-		for _, playerName in ipairs(players) do
-			if playerName ~= UnitName("player") then
-				local inRaid = false
+    -- Loop over each group
+    for group, players in pairs(normalizedRoster) do
+        for _, plannedName in ipairs(players) do
+            if plannedName ~= UnitName("player") then
+                -- Invite all aliases
+                for _, alias in ipairs(SplitAliases(plannedName)) do
+                    local inRaid = false
+                    for i = 1, GetNumRaidMembers() do
+                        local raidName = GetRaidRosterInfo(i)
+                        if raidName == alias then
+                            inRaid = true
+                            break
+                        end
+                    end
 
-				for i = 1, GetNumRaidMembers() do
-					local raidName = GetRaidRosterInfo(i)
-					if raidName == playerName then
-						inRaid = true
-						break
-					end
-				end
-
-				if not inRaid then
-					InviteByName(playerName)
-				end
-			end
-		end
-	end
+                    if not inRaid then
+                        InviteByName(alias)
+                    end
+                end
+            end
+        end
+    end
 end
 
 local function StartTimer()
@@ -955,97 +982,114 @@ end
 
 local function SortGroups()
     local raidLookup = {}
-    local listedPlayers = {}
+    local groupCounts = {}
+    local plannedCounts = {}
 
+    -- Init group counts
+    for i = 1, 8 do
+        groupCounts[i] = 0
+        plannedCounts[i] = 0
+    end
+
+    -- Build raid lookup
     for raidIndex = 1, GetNumRaidMembers() do
         local name, _, subgroup = GetRaidRosterInfo(raidIndex)
         if name then
             raidLookup[name] = {
                 index = raidIndex,
-                currentGroup = subgroup
+                group = subgroup,
+                assigned = false,
+                planned = false,
             }
+            groupCounts[subgroup] = groupCounts[subgroup] + 1
         end
     end
 
-    local groupCounts = {}
-    for targetGroup = 1, 8 do
-        groupCounts[targetGroup] = 0
-        local group = FIKA_Roster[targetGroup] or {}
-
-        local plannedCount = 0
+    -- Count planned per group
+    for group = 1, 8 do
+        local planned = FIKA_Roster[group] or {}
         for i = 1, 5 do
-            if group[i] then
-                plannedCount = plannedCount + 1
+            if planned[i] then
+                plannedCounts[group] = plannedCounts[group] + 1
             end
-        end
-
-        for i = 1, plannedCount do
-            local name = group[i]
-            listedPlayers[name] = true
-            local info = raidLookup[name]
-            if info and info.currentGroup ~= targetGroup then
-                SetRaidSubgroup(info.index, targetGroup)
-            end
-            groupCounts[targetGroup] = groupCounts[targetGroup] + 1
         end
     end
 
-    for _, info in pairs(raidLookup) do
-        groupCounts[info.currentGroup] = (groupCounts[info.currentGroup] or 0) + 1
-    end
+    -- STEP 1: Place planned players
+    for targetGroup = 1, 8 do
+        local planned = FIKA_Roster[targetGroup] or {}
 
-    for name, info in pairs(raidLookup) do
-        if not listedPlayers[name] then
-            local currentGroup = info.currentGroup
-            local plannedGroup = FIKA_Roster[currentGroup] or {}
+        for _, entry in ipairs(planned) do
+            local aliases = SplitAliases(entry)
 
-            local plannedCount = 0
-            for i = 1, 5 do
-                if plannedGroup[i] then
-                    plannedCount = plannedCount + 1
-                end
-            end
+            for _, alias in ipairs(aliases) do
+                local info = raidLookup[alias]
 
-            if plannedCount > 0 then
-                for targetGroup = 1, 8 do
-                    local targetPlannedGroup = FIKA_Roster[targetGroup] or {}
+                if info then
+                    info.assigned = true
+                    info.planned = true
 
-                    local targetPlannedCount = 0
-                    for i = 1, 5 do
-                        if targetPlannedGroup[i] then
-                            targetPlannedCount = targetPlannedCount + 1
-                        end
+                    if info.group ~= targetGroup and groupCounts[targetGroup] < 5 then
+                        SetRaidSubgroup(info.index, targetGroup)
+
+                        groupCounts[info.group] = groupCounts[info.group] - 1
+                        groupCounts[targetGroup] = groupCounts[targetGroup] + 1
+
+                        info.group = targetGroup
                     end
 
-                    local targetGroupCount = groupCounts[targetGroup] or 0
-
-                    if targetPlannedCount < 5 and targetGroupCount < 5 then
-                        if info.currentGroup ~= targetGroup then
-                            SetRaidSubgroup(info.index, targetGroup)
-                            groupCounts[targetGroup] = groupCounts[targetGroup] + 1
-                            groupCounts[currentGroup] = groupCounts[currentGroup] - 1
-                        end
-                        break
-                    end
+                    break
                 end
             end
         end
     end
 
-    for name, info in pairs(raidLookup) do
-        if not listedPlayers[name] then
-            local currentGroupCount = groupCounts[info.currentGroup] or 0
-            if currentGroupCount > 5 then
-                for targetGroup = 1, 8 do
-                    local targetGroupCount = groupCounts[targetGroup] or 0
-                    if targetGroupCount < 5 then
-                        if info.currentGroup ~= targetGroup then
-                            SetRaidSubgroup(info.index, targetGroup)
-                            groupCounts[targetGroup] = groupCounts[targetGroup] + 1
-                            groupCounts[info.currentGroup] = groupCounts[info.currentGroup] - 1
-                        end
-                        break
+    -- STEP 2: Handle unplanned players smartly
+    for raidIndex = 1, GetNumRaidMembers() do
+        local name, _, _ = GetRaidRosterInfo(raidIndex)
+        local info = raidLookup[name]
+
+        if info and not info.planned then
+            local currentGroup = info.group
+
+            local freeSlots = 5 - plannedCounts[currentGroup]
+
+            if freeSlots > 0 then
+                -- this group allows fillers → stay
+                info.assigned = true
+            else
+                -- this group should be full planned → mark for moving
+                info.assigned = false
+            end
+        end
+    end
+
+    -- STEP 3: Fill groups that need fillers
+    for targetGroup = 1, 8 do
+        local freeSlots = 5 - plannedCounts[targetGroup]
+
+        if freeSlots > 0 then
+            local moved = 0
+
+            for raidIndex = 1, GetNumRaidMembers() do
+                local name, _, _ = GetRaidRosterInfo(raidIndex)
+                local info = raidLookup[name]
+
+                if info and not info.assigned then
+                    if info.group ~= targetGroup then
+                        SetRaidSubgroup(info.index, targetGroup)
+
+                        groupCounts[info.group] = groupCounts[info.group] - 1
+                        groupCounts[targetGroup] = groupCounts[targetGroup] + 1
+
+                        info.group = targetGroup
+                        info.assigned = true
+                        moved = moved + 1
                     end
+                end
+
+                if moved >= freeSlots then
+                    break
                 end
             end
         end
@@ -1055,82 +1099,84 @@ end
 local function CheckMissing()
     local raidMembers = {}
 
-	local missingFound = false
-	local rosterEmpty = true
+    local missingFound = false
+    local rosterEmpty = true
 
-	local showOffline = IsShiftKeyDown()
-	local showDead = IsAltKeyDown()
+    local showOffline = IsShiftKeyDown()
+    local showDead = IsAltKeyDown()
 
+    -- Build raid members table
     for i = 1, GetNumRaidMembers() do
         local name, _, _, _, _, _, _, online, isDead = GetRaidRosterInfo(i)
         if name then
             raidMembers[name] = {
                 online = online,
-				isDead = isDead
+                dead = isDead
             }
         end
-
-		if not online then
-			if showOffline then
-                SendChatMessage("|cffff0000Offline|r: "..name, "RAID")
-                missingFound = true
-            end
-		end
-
-		if isDead then
-			if showDead then
-				SendChatMessage("|cffff0000Dead|r: "..name, "RAID")
-				missingFound = true
-			end
-		end
     end
 
+	local function IsPresent(plannedName)
+        for _, alias in ipairs(SplitAliases(plannedName)) do
+            if raidMembers[alias] then
+                return true
+            end
+        end
+        return false
+	end
+
+    -- Check each planned player in the roster
     for groupNum = 1, 8 do
         local group = FIKA_Roster[groupNum]
         if group then
             rosterEmpty = false
-            for _, name in ipairs(group) do
-                local memberInfo = raidMembers[name]
-                if not memberInfo then
-					if not showOffline and not showDead then
-						SendChatMessage("|cffffff00Missing|r: "..name.." (expected in group "..groupNum..")", "RAID")
-						missingFound = true
-					end
+            for _, plannedName in ipairs(group) do
+                if not IsPresent(plannedName) then
+                    if not showOffline and not showDead then
+                        SendChatMessage("|cffffff00Missing|r: "..plannedName.." (expected in group "..groupNum..")", "RAID")
+                        missingFound = true
+                    end
                 end
             end
-		end
+        end
     end
 
-	if not showOffline and not showDead then
-		local count = 0
-		for i = 1, GetNumRaidMembers() do
-			local name = GetRaidRosterInfo(i)
-			if name then
-				count = count +1
-			end
-		end
+    -- Check offline and dead players
+    for name, info in pairs(raidMembers) do
+        if not info.online and showOffline then
+            SendChatMessage("|cffff0000Offline|r: "..name, "RAID")
+            missingFound = true
+        end
+        if info.dead and showDead then
+            SendChatMessage("|cffff0000Dead|r: "..name, "RAID")
+            missingFound = true
+        end
+    end
 
-		if count > 0 and count < 40 then
-			SendChatMessage("We are currently "..count.." players in the raidgroup.", "RAID")
-		elseif count > 39 then
-			SendChatMessage("Raidgroup is currently full.", "RAID")
-		end
-	end
+    -- Report raid count
+    if not showOffline and not showDead then
+        local count = 0
+        for _ in pairs(raidMembers) do
+            count = count + 1
+        end
 
+        if count > 0 and count < 40 then
+            SendChatMessage("We are currently "..count.." players in the raidgroup.", "RAID")
+        elseif count >= 40 then
+            SendChatMessage("Raidgroup is currently full.", "RAID")
+        end
+    end
+
+    -- If none is missing/offline/dead
     if not missingFound then
-		if showDead then
-			SendChatMessage("Everyone is |cff00ff00alive|r.", "RAID")
-		elseif showOffline then
-        	SendChatMessage("No players |cff00ff00offline|r.", "RAID")
-		else
-			SendChatMessage("No players |cff00ff00missing|r.", "RAID")
-		end
-		return
+        if showDead then
+            SendChatMessage("Everyone is |cff00ff00alive|r.", "RAID")
+        elseif showOffline then
+            SendChatMessage("No players |cff00ff00offline|r.", "RAID")
+        else
+            SendChatMessage("No players |cff00ff00missing|r.", "RAID")
+        end
     end
-
-	--if rosterEmpty then
-    --    print("|cffffff00Roster is empty, none missing.|r")
-    --end
 end
 
 local function CreateButton(parent, name, label, loc, x, y, width, height)
@@ -1177,6 +1223,10 @@ function Fika:OnEvent()
 
 		if FIKA_Settings["keyword"] == nil then
 			FIKA_Settings["keyword"] = "+"
+		end
+
+		if FIKA_Settings["masterlooter"] == nil then
+			FIKA_Settings["masterlooter"] = UnitName("player")
 		end
 
 	elseif event == "RAID_ROSTER_UPDATE" then
@@ -1253,7 +1303,7 @@ function Fika.Import:Gui()
 	self.ImportHeader:SetFont("Fonts\\FRIZQT__.TTF", 12)
 	self.ImportHeader:SetTextColor(1, 1, 1, 1)
 	self.ImportHeader:SetShadowOffset(2,-2)
-	self.ImportHeader:SetText("Import")
+	self.ImportHeader:SetText("Import/Export Roster")
 	
 	-- ImportEditBox
 	self.ImportEditBox = CreateFrame("EditBox","ImportEditBox",self,"InputBoxTemplate")
@@ -1266,7 +1316,7 @@ function Fika.Import:Gui()
 
 	-- Add placeholder text with matching style
     local placeholderText = ImportEditBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    placeholderText:SetPoint("LEFT", ImportEditBox, "LEFT", 0, 0)  -- Adjusted left position for larger insets
+    placeholderText:SetPoint("LEFT", ImportEditBox, "LEFT", 0, 0)
     placeholderText:SetText("Example: 1Name, 5Name, 8Name…")
     placeholderText:SetTextColor(0.5, 0.5, 0.5, 0.7)
 
@@ -1285,89 +1335,98 @@ function Fika.Import:Gui()
 			placeholderText:Show()
         end
     end)
-
-	-- ClearButton
-	self.ClearButton = CreateButton(self, "ClearButton", "Clear", "BOTTOM", -100, 15, 80)
-	self.ClearButton:SetScript("OnEnter", function()
-		ShowTooltip(self.ClearButton, "Clear Roster", "Click: Empty the roster", "Shift+Click: Import roster from current raid", "Alt+Click: Export current roster")
-	end)
-	self.ClearButton:SetScript("OnClick", function()
-			if IsShiftKeyDown() then
-				ImportFromRaid()
-
-			elseif IsAltKeyDown() then
-				if Fika.Export:IsVisible() then
-					Fika.Export:Hide()
-				else
-					Fika.Export:Show()
-					Fika.Import:Hide()
-					Fika.Invite:Hide()
-
-					local lines = {}
-
-					for group = 1, 8 do
-						if FIKA_Roster[group] then
-							for _, name in ipairs(FIKA_Roster[group]) do
-								table.insert(lines, name)
-							end
-						end
-					end
-
-					table.sort(lines, function(a, b)
-						return a < b
-					end)
-
-					local exportText = table.concat(lines, "\n")
-					Fika.Export.ExportEditBox:SetText(exportText)
-				end
-			else
-				ClearRoster()
-				UpdateRoster()
-			end
-		end)
 	
 	-- AddButton
-	self.AddButton = CreateButton(self, "AddButton", "Add", "BOTTOM", 0, 15, 80)
+	self.AddButton = CreateButton(self, "AddButton", "Add", "BOTTOM", -50, 15, 80)
 	self.AddButton:SetScript("OnClick", function()
 		local input = self.ImportEditBox:GetText()
-		input = string.gsub(input, " ", "")
-		input = string.gsub(input, "[^a-zA-Z1-8,]", "")
 
-		if input == "" then
-			print("|cffff0000Import failed|r: You must enter a group number (1–8) along with a character name.\nSeparate multiple entries with commas (,)\nExample: 1 Cliffholger, 1 Azzco, 4 Nochin")
+		if not input or input == "" then
+			print("|cffff0000Import failed|r: Input is empty.")
 			return
 		end
-		
-		if not string.find(input, "^%d") then
-			print("|cffff0000Import failed|r: Player 1 has not been assigned to a group.")
-			return
+
+		-- Detect JSON
+		local isJSON = string.find(input, '"slots"%s*:')
+		if isJSON then
+			input = ImportFromJSON(input)
 		end
-		if string.find(input, "%d%d+") then
-			print("|cffff0000Import failed|r: One or more players are assigned to multiple groups.")
-			return
-		end
-		if string.find(input, ",") then
-			if not string.find(input, ",%d") then
-				print("|cffff0000Import failed|r: All players must be assigned to a group.")
-				return
+
+		local cleaned = {}
+		local total = 0
+
+		-- Split input by commas
+		for entry in string.gfind(input, "([^,]+)") do
+			if total >= 40 then
+				break
+			end
+
+			entry = string.gsub(entry, "^%s*(.-)%s*$", "%1")
+
+			local _, _, groupStr, nameStr = string.find(entry, "^(%d+)%s*(.+)$")
+			if not groupStr or not nameStr then
+				-- skip invalid instead of hard failing
+				-- print("|cffff0000Import failed|r: Invalid entry: "..entry)
+				-- return
+			else
+				local group = tonumber(groupStr)
+
+				-- Ignore groups outside 1–8
+				if group >= 1 and group <= 8 then
+					-- Name validation (letters + aliases)
+					local _, _, cleanName = string.find(nameStr, "^([A-Za-z/]+)")
+					if cleanName then
+						table.insert(cleaned, group.." "..cleanName)
+						total = total + 1
+					end
+				end
 			end
 		end
-		ImportRoster(input)
+
+		if total == 0 then
+			print("|cffff0000Import failed|r: No valid players found.")
+			return
+		end
+
+		ImportRoster(table.concat(cleaned, ","))
+
 		self.ImportEditBox:ClearFocus()
 	end)
 
-	-- RemoveButton
-	self.RemoveButton = CreateButton(self, "RemoveButton", "Remove", "BOTTOM", 100, 15, 80)
-	self.RemoveButton:SetScript("OnClick", function()
-		local input = self.ImportEditBox:GetText()
-		input = string.gsub(input, " ", "")
-		input = string.gsub(input, "[^a-zA-Z1-8,]", "")
+	-- Export
+	self.ExportButton = CreateButton(self, "ExportButton", "Export", "BOTTOM", 50, 15, 80)
+	self.ExportButton:SetScript("OnEnter", function()
+		ShowTooltip(self.ExportButton, "Export Raid", "Click: Export current roster", "Shift+Click: Import roster from current raid")
+	end)
+	self.ExportButton:SetScript("OnClick", function()
+		if IsShiftKeyDown() then
+			ImportFromRaid()
+		else
+			if Fika.Export:IsVisible() then
+				Fika.Export:Hide()
+			else
+				Fika.Export:Show()
+				Fika.Import:Hide()
+				Fika.Invite:Hide()
 
-		if input == "" then
-			print("|cffff0000Import failed|r: You must enter a character name to remove.\nSeparate multiple entries with commas (,)\nExample: Cliffholger, Azzco,Nochin")
-			return
+				local lines = {}
+
+				for group = 1, 8 do
+					if FIKA_Roster[group] then
+						for _, name in ipairs(FIKA_Roster[group]) do
+							table.insert(lines, name)
+						end
+					end
+				end
+
+				table.sort(lines, function(a, b)
+					return a < b
+				end)
+
+				local exportText = table.concat(lines, "\n")
+				Fika.Export.ExportEditBox:SetText(exportText)
+			end
 		end
-		RemoveFromRoster(input)
 		self.ImportEditBox:ClearFocus()
 	end)
 
@@ -1591,10 +1650,6 @@ function Fika.Waitlist:Gui()
 	self.child:SetWidth(190)
 	self.child:SetHeight(300)
 	
-	--self.child.bg = self.child:CreateTexture(nil,"BACKGROUND")
-	--self.child.bg:SetAllPoints(true)
-	--self.child.bg:SetTexture(0.2, 0.6, 0, 0.8)
-	
 	self.ScrollFrame:SetScrollChild(self.child)
 
 	self.ScrollFrame.ScrollBar = getglobal("InviteScrollFrameScrollBar")
@@ -1675,24 +1730,33 @@ function Fika.Roster:Gui()
 		this:StopMovingOrSizing()
 	end
 
-	backdrop = {
-		bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+	local backdrop = {
+			edgeFile = "Interface/DialogFrame/UI-DialogBox-Border",
+			bgFile = "Interface/RaidFrame/UI-RaidFrame-GroupBg",
+			tile="false",
+			tileSize="32",
+			edgeSize="32",
+			insets={
+				left="11",
+				right="11",
+				top="11",
+				bottom="11"
+			}
 	}
 	self:SetFrameStrata("BACKGROUND")
-	self:SetWidth(340)
-	self:SetHeight(425)
-	self:SetPoint("CENTER",0,0)
+	self:SetWidth(680)
+	self:SetHeight(500)
+	self:SetPoint("CENTER", 0, 0)
+
 	self:SetMovable(1)
 	self:EnableMouse(1)
 	self:RegisterForDrag("LeftButton")
 	self:SetScript("OnDragStart", Fika.Roster.Drag.StartMoving)
 	self:SetScript("OnDragStop", Fika.Roster.Drag.StopMovingOrSizing)
-	self:SetBackdropColor(0,0,0,1);
-	
+	self:SetBackdrop(backdrop)
+	--self:SetBackdropColor(0,0,0,1);
+
 	self.Background = {}
-    for _, position in ipairs({"Topleft", "Topright", "Bottomleft", "Bottomright"}) do
-        self.Background[position] = CreateFrame("Frame", nil, self)
-    end
 
 	for i = 1, 2 do
         self.Background["Tab"..i.."buttonbg"] = CreateFrame("Frame", nil, self)
@@ -1700,50 +1764,19 @@ function Fika.Roster:Gui()
         self.Background["Button"..i] = CreateFrame("Button", nil, self)
     end
 
-	self.Icon = self:CreateTexture(nil, 'ARTWORK')
-	self.Icon:SetTexture("Interface\\AddOns\\Fika\\media\\fika")
-	self.Icon:SetWidth(58)
-	self.Icon:SetHeight(58)
-	self.Icon:SetPoint("TOPLEFT",-1,6)
-
 	self.CloseButton = CreateFrame("Button","CloseListButton",self,"UIPanelCloseButton")
-	self.CloseButton:SetPoint("TOPRIGHT",4,4)
+	self.CloseButton:SetPoint("TOPRIGHT",-5,-5)
 	self.CloseButton:SetFrameStrata("LOW")
 	self.CloseButton:SetWidth(32)
 	self.CloseButton:SetHeight(32)
 	self:Hide()
 
-	self.Header = self.Background.Topleft:CreateFontString(nil,"OVERLAY", "GameFontNormal")
-	self.Header:SetPoint("TOP",55,-17)
+	self.Header = self:CreateFontString(nil,"OVERLAY", "GameFontNormal")
+	self.Header:SetPoint("TOP",0,-12)
 	self.Header:SetFont("Fonts\\FRIZQT__.TTF", 12)
 	self.Header:SetTextColor(1, 1, 1, 1)
 	self.Header:SetShadowOffset(2,-2)
-	self.Header:SetText("|cff00ccffF.|cffffff00I.K.|cff00ccffA|r")
-
-	local backdropFiles = {
-        Topleft = "Interface\\PaperDollInfoFrame\\UI-Character-General-TopLeft",
-        Topright = "Interface\\PaperDollInfoFrame\\UI-Character-General-TopRight",
-        Bottomleft = "Interface\\PaperDollInfoFrame\\UI-Character-General-BottomLeft",
-        Bottomright = "Interface\\PaperDollInfoFrame\\UI-Character-General-BottomRight",
-    }
-    
-    local framePositions = {
-        Topleft = {-10, 13, 256, 256},
-        Topright = {246, 13, 128, 256},
-        Bottomleft = {-10, -243, 256, 256},
-        Bottomright = {246, -243, 128, 256},
-    }
-    
-    for position, backdropFile in pairs(backdropFiles) do
-        local frame = self.Background[position]
-        local positionData = framePositions[position]
-        
-        frame:SetFrameStrata("BACKGROUND")
-        frame:SetWidth(positionData[3])
-        frame:SetHeight(positionData[4])
-        frame:SetBackdrop({bgFile = backdropFile})
-        frame:SetPoint("TOPLEFT", positionData[1], positionData[2])
-    end
+	self.Header:SetText("|cff00ccffFast.|cffffff00Invite.Komp.|cff00ccffAssigner|r v."..FIKA_VERSION)
 
     -- Set spacing between tabs and buttons (adjust the distance as needed)
     local backdrop = {bgFile = "Interface\\SPELLBOOK\\SpellBook-SkillLineTab"}
@@ -1756,20 +1789,20 @@ function Fika.Roster:Gui()
         tab:SetWidth(64)
         tab:SetHeight(64)
         tab:SetBackdrop(backdrop)
-        tab:SetPoint("TOPRIGHT", 61, spacing * i)  -- Apply spacing for tabs
+        tab:SetPoint("TOPRIGHT", 58, spacing * i)  -- Apply spacing for tabs
     end
 
 	-- Define the CreateTabButton function
     local function CreateTabButton(tab, button, glow, glowHide, tooltipText, buttonSpacing, texture)
         -- Tab frame setup
         tab:SetFrameStrata("LOW")
-        tab:SetWidth(315)
-        tab:SetHeight(350)
-        tab:SetPoint("TOPLEFT", self, "TOPLEFT", 15, -65)
+        tab:SetWidth(650)
+        tab:SetHeight(455)
+        tab:SetPoint("TOPLEFT", self, "TOPLEFT", 15, -30)
 
         button:SetBackdrop({bgFile = texture})
         button:SetFrameStrata("MEDIUM")
-        button:SetPoint("TOPRIGHT", 31, -12 + buttonSpacing)
+        button:SetPoint("TOPRIGHT", 28, -12 + buttonSpacing)
         button:SetWidth(30)
         button:SetHeight(30)
         
@@ -1831,7 +1864,7 @@ function Fika.Roster:Gui()
 
     local tooltipTexts = {
         "Roster",
-        "Options"
+        "Misc"
     }
 
     local buttonTextures = {
@@ -1857,219 +1890,9 @@ function Fika.Roster:Gui()
 	self["Glow1"]:Show()
 
 	--TAB1--
-	-- RosterInviteButton
-	self.RosterInviteButton = CreateButton(self.Background.Tab1, "RosterInviteButton", "Invite", "TOP", -75, 35, 60)
-	self.RosterInviteButton:SetScript("OnEnter", function()
-		ShowTooltip(self.RosterInviteButton, "Invite", "Click: Open the invite window", "Shift+Click: Invite Preraid squad", "Alt+Click: Print Preraid squad, should be invited first")
-	end)
-	self.RosterInviteButton:SetScript("OnClick", function()
-		if IsShiftKeyDown() then
-			local rosterEmpty = true
-			for _, _ in pairs(FIKA_Roster) do
-        		rosterEmpty = false
-    		end
-
-			if rosterEmpty == false then
-				InviteRoster()
-			else
-				print("|cffffff00Roster is empty.|r")
-			end
-
-		elseif IsAltKeyDown() then
-			SquadMember("Preraid",FIKA_Preraid, "")
-
-		else
-			if Fika.Invite:IsVisible() then
-				Fika.Invite:Hide()
-			else
-				Fika.Import:Hide()
-				Fika.Export:Hide()
-				Fika.Invite:Show()
-			end
-		end
-	end)
-	
-	-- RosterSortButton
-	self.RosterSortButton = CreateButton(self.Background.Tab1, "RosterSortButton", "Sort", "TOP", -10, 35, 60)
-	self.RosterSortButton:SetScript("OnEnter", function()
-		ShowTooltip(self.RosterSortButton, "Sort groups", "Click: Sort players into their assigned groups", "Shift+Click: Give assist to assist squad", "Alt+Click: Print Assist squad list")
-	end)
-	self.RosterSortButton:SetScript("OnClick", function()
-		if IsShiftKeyDown() then
-			local raidLookup = {}
-			for i = 1, GetNumRaidMembers() do
-				local name, _, _, _, _, _, _, _, isAssist = GetRaidRosterInfo(i)
-				if name then
-					raidLookup[name] = { index = i, isAssist = isAssist }
-				end
-			end
-
-			for _, assistName in ipairs(FIKA_Assist) do
-				local info = raidLookup[assistName]
-				if info and not info.isAssist then
-					PromoteToAssistant(assistName)
-				end
-			end
-
-		elseif IsAltKeyDown() then
-			SquadMember("Assist",FIKA_Assist, "")
-
-		else
-			if (pingdelay == nil or GetTime()-pingdelay > 2) then 
-				pingdelay = GetTime()
-				SortGroups()
-			else
-				print("|cffff0000You are sorting too fast.|r")
-			end
-		end
-	end)
-
-	-- RosterMissingButton
-	self.RosterMissingButton = CreateButton(self.Background.Tab1, "RosterMissingButton", "Miss?", "TOP", 55, 35, 60)
-	self.RosterMissingButton:SetScript("OnEnter", function()
-		ShowTooltip(self.RosterMissingButton, "Missing Check", "Click: Report |cffffff00missing|r players in raid chat", "|cff66ff66Shift+Click: Report|r |cffff0000offline|r |cff66ff66players in raid chat|r", "|cff66ff66Alt+Click: Report|r |cffff0000dead|r |cff66ff66players in raid chat|r")
-	end)
-	self.RosterMissingButton:SetScript("OnClick", function()
-		CheckMissing()
-	end)
-
-	-- RosterImportButton
-	self.RosterImportButton = CreateButton(self.Background.Tab1, "RosterImportButton", "Import", "TOP", 120, 35, 60)
-	self.RosterImportButton:SetScript("OnEnter", function()
-		ShowTooltip(self.RosterImportButton, "Import Roster", "Click: Open manual import", "Shift+Click: Import Preraid squad", "Alt+Click: Import Assist squad")
-	end)
-	self.RosterImportButton:SetScript("OnClick", function()
-		local function MakeSet(list)
-			local set = {}
-			for _, name in ipairs(list) do
-				set[name] = true
-			end
-			return set
-		end
-
-		local function SyncSquad(squadName, targetList, sourceList)
-			local sourceSet = MakeSet(sourceList)
-			local targetSet = MakeSet(targetList)
-			local changed = false
-
-			for _, name in ipairs(sourceList) do
-				if not targetSet[name] then
-					SquadMember(squadName, targetList, name)
-					changed = true
-				end
-			end
-
-			if changed then
-				print("|cffffff00"..squadName.." squad synced.|r")
-			else
-				print("|cffffff00"..squadName.." squad already up to date.|r")
-			end
-		end
-
-		if IsShiftKeyDown() then
-			if FIKA_Settings["guild"] == true then
-				local Officers, Classleaders = OfficerRoster()
-				SyncSquad("Preraid", FIKA_Preraid, Classleaders)
-			else
-				print("|cffffff00You need to Toggle Roster guild check for this..|r")
-			end
-
-		elseif IsAltKeyDown() then
-			if FIKA_Settings["guild"] == true then
-				local Officers, Classleaders = OfficerRoster()
-				SyncSquad("Assist", FIKA_Assist, Officers)
-			else
-				print("|cffffff00You need to Toggle Roster guild check for this..|r")
-			end
-
-		else
-			if Fika.Import:IsVisible() then
-				Fika.Import:Hide()
-			else
-				Fika.Export:Hide()
-				Fika.Invite:Hide()
-				Fika.Import:Show()
-			end
-		end
-	end)
-
-	local groupsPerRow = 2
-	local spacingX = 170
-	local spacingY = 87
-	local playerSpacingY = 15
-
-	local startX = 20
-	local startY = -65
-
-	if not self.GroupMembers then self.GroupMembers = {} end
-	if not self.GroupBackgrounds then self.GroupBackgrounds = {} end
-
-	for group = 1, 8 do
-
-		if not self.GroupMembers[group] then self.GroupMembers[group] = {} end
-
-		local row = math.floor((group - 1) / groupsPerRow)
-		local col = group - row * groupsPerRow - 1
-
-		local groupX = startX + (col * spacingX)
-		local groupY = startY - (row * spacingY)
-
-		local groupBackground = CreateFrame("Frame", nil, self.Background.Tab1)
-		groupBackground:SetFrameStrata("BACKGROUND")
-		groupBackground:SetWidth(140)
-		groupBackground:SetHeight(90)
-		groupBackground:SetPoint("TOPLEFT", self, "TOPLEFT", groupX - 6, groupY)
-		groupBackground:SetBackdrop({
-			edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-			tile = true,
-			tileSize = 16,
-			edgeSize = 12,
-			insets = { left = 3, right = 3, top = 3, bottom = 3 }
-		})
-
-		self.GroupBackgrounds[group] = groupBackground
-
-		self.groupTitle = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		self.groupTitle:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - 2)
-		self.groupTitle:SetText("Group "..group)
-
-		self.GroupMembers[group] = {}
-
-		self.GroupButtons = self.GroupButtons or {}
-		self.GroupButtons[group] = self.GroupButtons[group] or {}
-
-		for i = 1, 5 do
-			local member = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-			member:SetPoint("TOPLEFT", self, "TOPLEFT", groupX + 12, groupY - (i * playerSpacingY))
-			member:SetText("|cffff0000---|r")
-			self.GroupMembers[group][i] = member
-
-			-- - Button
-			local btn = CreateFrame("Button", nil, self.Background.Tab1, "UIPanelButtonTemplate")
-			btn:SetWidth(12)
-			btn:SetHeight(12)
-			btn:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - (i * playerSpacingY))
-			btn:SetText("|cffff0000-|r")
-
-			self.GroupButtons[group][i] = btn
-
-			-- capture values
-			local g = group
-			local idx = i
-
-			btn:SetScript("OnClick", function()
-				local name = FIKA_Roster[g] and FIKA_Roster[g][idx]
-				if name then
-					RemoveFromRoster(name)
-				end
-			end)
-		end
-	end
-
-	--TAB2--
 	-- InvCheckbox
-	self.InvCheckbox = CreateFrame("CheckButton", "InvCheckbox", self.Background.Tab2, "UICheckButtonTemplate")
-	self.InvCheckbox:SetPoint("LEFT",10,150)
+	self.InvCheckbox = CreateFrame("CheckButton", "InvCheckbox", self.Background.Tab1, "UICheckButtonTemplate")
+	self.InvCheckbox:SetPoint("TOPLEFT",10,0)
 	self.InvCheckbox:SetWidth(35)
 	self.InvCheckbox:SetHeight(35)
 	self.InvCheckbox:SetFrameStrata("MEDIUM")
@@ -2102,10 +1925,10 @@ function Fika.Roster:Gui()
 	self.textInv:SetShadowOffset(2,-2)
     self.textInv:SetText("Raid invites with keyword (guild / whisper)")
 
-	self.KeywordEditBox = CreateFrame("EditBox","KeywordEditBox",self.Background.Tab2,"InputBoxTemplate")
+	self.KeywordEditBox = CreateFrame("EditBox","KeywordEditBox",self.InvCheckbox,"InputBoxTemplate")
 	self.KeywordEditBox:SetFontObject("GameFontHighlight")
 	self.KeywordEditBox:SetFrameStrata("DIALOG")
-	self.KeywordEditBox:SetPoint("CENTER",0,115)
+	self.KeywordEditBox:SetPoint("LEFT",42,-20)
 	self.KeywordEditBox:SetWidth(150)
 	self.KeywordEditBox:SetHeight(30)
 	self.KeywordEditBox:SetAutoFocus(false)
@@ -2144,17 +1967,337 @@ function Fika.Roster:Gui()
 		end
 	end)
 
-	--keywordText
-	local keywordText = self.KeywordEditBox:CreateFontString(nil, "OVERLAY")
-    keywordText:SetPoint("TOP",0,10)
-    keywordText:SetFont("Fonts\\FRIZQT__.TTF", 12)
-	keywordText:SetTextColor(255, 255, 0, 1)
-	keywordText:SetShadowOffset(2,-2)
-    keywordText:SetText("Keyword")
+	-- MasterLooterButton
+	self.MasterLooterButton = CreateButton(self.Background.Tab1, "MasterLooterButton", "MasterLoot", "TOP", 250, -10)
+	self.MasterLooterButton:SetScript("OnEnter", function()
+		ShowTooltip(self.MasterLooterButton, "MasterLoot", "Click: Set Masterlooter to "..FIKA_Settings["masterlooter"])
+	end)
+	self.MasterLooterButton:SetScript("OnClick", function()
+		local method = GetLootMethod()
+		if method ~= "master" then
+			local mymasterlooter = FIKA_Settings["masterlooter"]
+			SetLootMethod("master", mymasterlooter, 1)
 
+			for i = 1, GetNumRaidMembers() do
+				local name, _, _, _, _, _, _, _, isAssist = GetRaidRosterInfo(i)
+				if name == mymasterlooter then
+					if not isAssist then
+						PromoteToAssistant(mymasterlooter)
+					end
+				end
+			end
+		end
+	end)
+
+	self.MasterLooterEditBox = CreateFrame("EditBox","MasterLooterEditBox",self.MasterLooterButton,"InputBoxTemplate")
+	self.MasterLooterEditBox:SetFontObject("GameFontHighlight")
+	self.MasterLooterEditBox:SetFrameStrata("DIALOG")
+	self.MasterLooterEditBox:SetPoint("RIGHT",-90,0)
+	self.MasterLooterEditBox:SetWidth(150)
+	self.MasterLooterEditBox:SetHeight(30)
+	self.MasterLooterEditBox:SetAutoFocus(false)
+	self.MasterLooterEditBox:SetJustifyH("CENTER")
+
+	self.MasterLooterplaceholderText = MasterLooterEditBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.MasterLooterplaceholderText:SetPoint("CENTER", MasterLooterEditBox, "CENTER", 0, 0)
+	self.MasterLooterplaceholderText:SetText(FIKA_Settings["masterlooter"])
+	self.MasterLooterplaceholderText:SetTextColor(0.5, 0.5, 0.5, 0.7)
+
+	self.MasterLooterEditBox:SetScript("OnEscapePressed", function()
+		self.MasterLooterEditBox:ClearFocus()
+		self.MasterLooterEditBox:SetText("")
+		self.MasterLooterplaceholderText:Show()
+	end)
+
+	self.MasterLooterEditBox:SetScript("OnEnterPressed", function()
+		self.MasterLooterEditBox:ClearFocus()
+		if self.MasterLooterEditBox:GetText() == "" then
+			self.MasterLooterplaceholderText:Show()
+			return
+		end
+		FIKA_Settings["masterlooter"] = self.MasterLooterEditBox:GetText()
+		self.MasterLooterplaceholderText:SetText(FIKA_Settings["masterlooter"])
+		self.MasterLooterEditBox:SetText("")
+		self.MasterLooterplaceholderText:Show()
+	end)
+
+	self.MasterLooterEditBox:SetScript("OnChar", function()
+		self.MasterLooterplaceholderText:Hide()
+		
+		local n = self.MasterLooterEditBox:GetText()
+		if n then 
+			local clean = string.gsub(n, "[^%a]", "")
+			local txt = string.upper(string.sub(clean,1,1))..string.lower(string.sub(clean,2))
+			self.MasterLooterEditBox:SetText(txt)
+		end
+	end)
+
+	-- RosterInviteButton
+	self.RosterInviteButton = CreateButton(self.Background.Tab1, "RosterInviteButton", "Invite", "TOP", -250, -55)
+	self.RosterInviteButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterInviteButton, "Invite", "Click: Open the invite window", "Shift+Click: Invite Preraid squad", "Alt+Click: Print Preraid squad")
+	end)
+	self.RosterInviteButton:SetScript("OnClick", function()
+		if IsShiftKeyDown() then
+			local rosterEmpty = true
+			for _, _ in pairs(FIKA_Roster) do
+        		rosterEmpty = false
+    		end
+
+			if rosterEmpty == false then
+				InviteRoster()
+			else
+				print("|cffffff00Roster is empty.|r")
+			end
+
+		elseif IsAltKeyDown() then
+			SquadMember("Preraid",FIKA_Preraid, "")
+
+		else
+			if Fika.Invite:IsVisible() then
+				Fika.Invite:Hide()
+			else
+				Fika.Import:Hide()
+				Fika.Export:Hide()
+				Fika.Invite:Show()
+			end
+		end
+	end)
+
+	-- RosterAssistButton
+	self.RosterAssistButton = CreateButton(self.Background.Tab1, "RosterAssistButton", "Assist", "TOP", 50, -55)
+	self.RosterAssistButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterAssistButton, "Assist", "Click: Give assist to Assist Squad", "Shift+Click: Sync Assist Squad from guild")
+	end)
+	self.RosterAssistButton:SetScript("OnClick", function()
+
+		local function MakeSet(list)
+			local set = {}
+			for _, name in ipairs(list) do
+				set[name] = true
+			end
+			return set
+		end
+
+		local function SyncSquad(squadName, targetList, sourceList)
+			local sourceSet = MakeSet(sourceList)
+			local targetSet = MakeSet(targetList)
+			local changed = false
+
+			for _, name in ipairs(sourceList) do
+				if not targetSet[name] then
+					SquadMember(squadName, targetList, name)
+					changed = true
+				end
+			end
+
+			if changed then
+				print("|cffffff00"..squadName.." squad synced.|r")
+			else
+				print("|cffffff00"..squadName.." squad already up to date.|r")
+			end
+		end
+
+		if IsShiftKeyDown() then
+			if FIKA_Settings["guild"] then
+				local Officers, Classleaders = OfficerRoster()
+				SyncSquad("Assist", FIKA_Assist, Officers)
+			else
+				print("|cffffff00You need to Toggle Roster guild check for this.|r")
+			end
+
+		else
+			local raidLookup = {}
+			for i = 1, GetNumRaidMembers() do
+				local name, _, _, _, _, _, _, _, isAssist = GetRaidRosterInfo(i)
+				if name then
+					raidLookup[name] = { index = i, isAssist = isAssist }
+				end
+			end
+
+			for _, assistName in ipairs(FIKA_Assist) do
+				local info = raidLookup[assistName]
+				if info and not info.isAssist then
+					PromoteToAssistant(assistName)
+				end
+			end
+		end
+	end)
+	
+	-- RosterSortButton
+	self.RosterSortButton = CreateButton(self.Background.Tab1, "RosterSortButton", "Sort", "TOP", -150, -55)
+	self.RosterSortButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterSortButton, "Sort groups", "Click: Sort players into their assigned groups")
+	end)
+	self.RosterSortButton:SetScript("OnClick", function()
+		if (pingdelay == nil or GetTime()-pingdelay > 2) then 
+				pingdelay = GetTime()
+				SortGroups()
+		else
+			print("|cffff0000You are sorting too fast.|r")
+		end
+	end)
+
+	-- RosterMissingButton
+	self.RosterMissingButton = CreateButton(self.Background.Tab1, "RosterMissingButton", "Miss?", "TOP", -50, -55)
+	self.RosterMissingButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterMissingButton, "Missing Check", "Click: Report |cffffff00missing|r players in raid chat", "|cff66ff66Shift+Click: Report|r |cffff0000offline|r |cff66ff66players in raid chat|r", "|cff66ff66Alt+Click: Report|r |cffff0000dead|r |cff66ff66players in raid chat|r")
+	end)
+	self.RosterMissingButton:SetScript("OnClick", function()
+		CheckMissing()
+	end)
+
+	-- RosterImportButton
+	self.RosterImportButton = CreateButton(self.Background.Tab1, "RosterImportButton", "Imp/Exp", "TOP", 150, -55)
+	self.RosterImportButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterImportButton, "Import/Export", "Click: Open roster import/export", "Shift+Click: Import Preraid squad", "Alt+Click: Import Assist squad")
+	end)
+	self.RosterImportButton:SetScript("OnClick", function()
+
+		local function MakeSet(list)
+			local set = {}
+			for _, name in ipairs(list) do
+				set[name] = true
+			end
+			return set
+		end
+
+		local function SyncSquad(squadName, targetList, sourceList)
+			local sourceSet = MakeSet(sourceList)
+			local targetSet = MakeSet(targetList)
+			local changed = false
+
+			for _, name in ipairs(sourceList) do
+				if not targetSet[name] then
+					SquadMember(squadName, targetList, name)
+					changed = true
+				end
+			end
+
+			if changed then
+				print("|cffffff00"..squadName.." squad synced.|r")
+			else
+				print("|cffffff00"..squadName.." squad already up to date.|r")
+			end
+		end
+
+		if IsShiftKeyDown() then
+			if FIKA_Settings["guild"] then
+				local Officers, Classleaders = OfficerRoster()
+				SyncSquad("Preraid", FIKA_Preraid, Classleaders)
+			else
+				print("|cffffff00You need to Toggle Roster guild check for this.|r")
+			end
+
+		elseif IsAltKeyDown() then
+			if FIKA_Settings["guild"] then
+				local Officers, Classleaders = OfficerRoster()
+				SyncSquad("Assist", FIKA_Assist, Officers)
+			else
+				print("|cffffff00You need to Toggle Roster guild check for this.|r")
+			end
+
+		else
+			if Fika.Import:IsVisible() then
+				Fika.Import:Hide()
+			else
+				Fika.Export:Hide()
+				Fika.Invite:Hide()
+				Fika.Import:Show()
+			end
+		end
+	end)
+
+	-- RosterClearButton
+	self.RosterClearButton = CreateButton(self.Background.Tab1, "RosterClearButton", "Clear", "TOP", 250, -55)
+	self.RosterClearButton:SetScript("OnEnter", function()
+		ShowTooltip(self.RosterClearButton, "Clear Roster", "Click: Clear the Roster")
+	end)
+	self.RosterClearButton:SetScript("OnClick", function()
+		ClearRoster()
+		UpdateRoster()
+	end)
+
+	local groupsPerRow = 2
+	local spacingX = 310
+	local spacingY = 95
+	local playerSpacingY = 15
+
+	local startX = 40
+	local startY = -110
+
+	if not self.GroupMembers then self.GroupMembers = {} end
+	if not self.GroupBackgrounds then self.GroupBackgrounds = {} end
+
+	for group = 1, 8 do
+
+		if not self.GroupMembers[group] then self.GroupMembers[group] = {} end
+
+		local row = math.floor((group - 1) / groupsPerRow)
+		local col = group - row * groupsPerRow - 1
+
+		local groupX = startX + (col * spacingX)
+		local groupY = startY - (row * spacingY)
+
+		local groupBackground = CreateFrame("Frame", nil, self.Background.Tab1)
+		groupBackground:SetFrameStrata("BACKGROUND")
+		groupBackground:SetWidth(300)
+		groupBackground:SetHeight(90)
+		groupBackground:SetPoint("TOPLEFT", self, "TOPLEFT", groupX - 5, groupY)
+		groupBackground:SetBackdrop({
+			edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+			bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+			tile = true,
+			tileSize = 16,
+			edgeSize = 12,
+			insets = { left = 3, right = 3, top = 3, bottom = 3 }
+		})
+		groupBackground:SetBackdropColor(0.05, 0.05, 0.05, 0.95)
+
+		self.GroupBackgrounds[group] = groupBackground
+
+		self.groupTitle = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		self.groupTitle:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - 2)
+		self.groupTitle:SetText("Group "..group)
+
+		self.GroupMembers[group] = {}
+
+		self.GroupButtons = self.GroupButtons or {}
+		self.GroupButtons[group] = self.GroupButtons[group] or {}
+
+		for i = 1, 5 do
+			local member = self.Background.Tab1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+			member:SetPoint("TOPLEFT", self, "TOPLEFT", groupX + 12, groupY - (i * playerSpacingY))
+			member:SetText("|cffff0000---|r")
+			self.GroupMembers[group][i] = member
+
+			-- - Button
+			local btn = CreateFrame("Button", nil, self.Background.Tab1, "UIPanelButtonTemplate")
+			btn:SetWidth(12)
+			btn:SetHeight(12)
+			btn:SetPoint("TOPLEFT", self, "TOPLEFT", groupX, groupY - (i * playerSpacingY))
+			btn:SetText("|cffff0000-|r")
+
+			self.GroupButtons[group][i] = btn
+
+			-- capture values
+			local g = group
+			local idx = i
+
+			btn:SetScript("OnClick", function()
+				local name = FIKA_Roster[g] and FIKA_Roster[g][idx]
+				if name then
+					RemoveFromRoster(name)
+					UpdateRoster()
+				end
+			end)
+		end
+	end
+
+	--TAB2--
 	-- toggle guild
 	self.GuildCheckbox = CreateFrame("CheckButton", "GuildCheckbox", self.Background.Tab2, "UICheckButtonTemplate")
-	self.GuildCheckbox:SetPoint("LEFT",10,80)
+	self.GuildCheckbox:SetPoint("CENTER",0,100)
 	self.GuildCheckbox:SetWidth(35)
 	self.GuildCheckbox:SetHeight(35)
 	self.GuildCheckbox:SetFrameStrata("MEDIUM") 
@@ -2186,7 +2329,7 @@ function Fika.Roster:Gui()
 
 
 	self.textGuild = self.GuildCheckbox:CreateFontString(nil, "OVERLAY")
-    self.textGuild:SetPoint("LEFT", 35, 0)
+    self.textGuild:SetPoint("BOTTOM", 0, -25)
     self.textGuild:SetFont("Fonts\\FRIZQT__.TTF", 12)
 	self.textGuild:SetTextColor(255,255,0, 1)
 	self.textGuild:SetShadowOffset(2,-2)
@@ -2207,17 +2350,13 @@ function Fika.Roster:Gui()
 	}
 
 	self.GuildFrame = CreateFrame("Frame",nil,self.Background.Tab2)
-	self.GuildFrame:SetPoint("CENTER",0, 5)
+	self.GuildFrame:SetPoint("CENTER",0, 0)
 	self.GuildFrame:SetFrameStrata("HIGH")
 	self.GuildFrame:SetBackdrop(backdrop1)
 	self.GuildFrame:SetBackdropColor(0,0,0,1)
 	self.GuildFrame:SetWidth(290)
 	self.GuildFrame:SetHeight(100)
 	self.GuildFrame:Hide()
-
-	--self.GuildFrame.bg = self.GuildFrame:CreateTexture(nil,"BACKGROUND")
-	--self.GuildFrame.bg:SetAllPoints(true)
-	--self.GuildFrame.bg:SetTexture(0.2, 0.6, 0, 0.8)
 
 	self.PreraidRankEditBox = CreateFrame("EditBox","PreraidRankEditBox",self.GuildFrame,"InputBoxTemplate")
 	self.PreraidRankEditBox:SetFontObject("GameFontHighlight")
@@ -2515,5 +2654,3 @@ end
 
 SlashCmdList["FIKA_SLASH"] = Fika.slash
 SLASH_FIKA_SLASH1 = "/fika"
-
-
