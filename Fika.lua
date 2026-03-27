@@ -1317,7 +1317,7 @@ function Fika.Import:Gui()
 	-- Add placeholder text with matching style
     local placeholderText = ImportEditBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     placeholderText:SetPoint("LEFT", ImportEditBox, "LEFT", 0, 0)
-    placeholderText:SetText("Example: json or 1Name, 5Name, 8Name…")
+    placeholderText:SetText("Example: json or 1Name, 5Name…")
     placeholderText:SetTextColor(0.5, 0.5, 0.5, 0.7)
 
 	self.ImportEditBox:SetScript("OnEnterPressed", function()
